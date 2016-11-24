@@ -4,8 +4,6 @@
 # ### Required libraries
 
 # In[21]:
-
-get_ipython().magic(u'matplotlib inline')
 import matplotlib.pyplot as plt
 import csv
 import pandas as pd
@@ -21,18 +19,6 @@ from shutil import copyfile
 import pandas as pd
 
 
-# ### Utils
-
-# In[1]:
-
-def plot_hist(score,title,xlabel):
-    h,b = np.histogram(score, bins='auto')
-    plt.hist(score,bins=b)
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel('Frequency')
-    return h
-
 
 # ### Parameters
 
@@ -41,7 +27,7 @@ def plot_hist(score,title,xlabel):
 behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
 release = 'Q2'
 outScore = 'PMAT24_A_CR'
-DATADIR = '/data/jdubois/data/HCP/'
+DATADIR = '/data/jdubois/data/HCP/MRI'
 PARCELDIR = '/home/paola/parcellations'
 parcellation = 'shenetal_neuroimage2013'
 overwrite = False
@@ -403,8 +389,8 @@ def Finn_preprocess(fmriFile):
 def Finn_loadandpreprocess(fmriFile, parcellation, overwrite):
     subject = op.basename(op.dirname(op.dirname(op.dirname(op.dirname(fmriFile)))))
     fmriRun = op.basename(op.dirname(fmriFile))
-    ResultsDir = op.join(DATADIR,'Results')
-    if not op.isdir(ResultsDir): mkdir(ResultsDir)
+    ResultsDir = op.join(DATADIR,'Testing','Results')
+    if not op.isdir(ResultsDir): makedirs(ResultsDir)
     ResultsDir = op.join(ResultsDir,'Finn')
     if not op.isdir(ResultsDir): mkdir(ResultsDir)
 
@@ -526,7 +512,7 @@ RelRMSMean = np.zeros([len(subjects), 2])
 excludeSub = list()
 
 for iSub in range(len(subjects)):
-    RelRMSMeanFile = op.join(DATADIR, str(subjects[iSub]), 'MNINonLinear','Results',                                  thisRun+'_zz', 'Movement_RelativeRMS_mean.txt')
+    RelRMSMeanFile = op.join(buildpath(str(subjects[iSub]), thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
     fLR = RelRMSMeanFile.replace('zz','LR');
     fRL = RelRMSMeanFile.replace('zz','RL');
     
@@ -543,7 +529,7 @@ for iSub in range(len(subjects)):
      
     for iPEdir in range(len(PEdirs)):
         PEdir=PEdirs[iPEdir]
-        fmriFile = op.join(testpath(str(subjects[iSub]),thisRun+'_'+PEdir),                           thisRun+'_'+PEdir+suffix+'.nii.gz')
+        fmriFile = op.join(buildpath(str(subjects[iSub]),thisRun+'_'+PEdir),                           thisRun+'_'+PEdir+suffix+'.nii.gz')
         if not op.isfile(fmriFile):
             print str(subjects[iSub]), 'missing', fmriFile, ', exclude'
             excludeSub.append(iSub)
