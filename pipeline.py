@@ -34,6 +34,7 @@ overwrite = False
 thisRun = 'rfMRI_REST1'
 isDataClean = True
 doPlot = True
+isTest = True
 
 if thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
@@ -50,13 +51,17 @@ def buildpath(subject,fmriRun):
 def testpath(subject,fmriRun):
     return op.join(DATADIR, 'Testing', subject,'Results',fmriRun)
 
-
+def mktestdirs(subject,thisRun):
+    basepath = op.join(DATADIR,'Testing',subject,'Results')
+    for fmriRun in ['LR', 'RL']:
+        makedirs(op.join(basepath,thisRun+'_'+fmriRun))
+	
 # ### Functions
 
 # In[13]:
 
 def makeTissueMasks(subject,fmriRun,overwrite):
-    fmriFile = op.join(testpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
+    fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
     WMmaskFileout = op.join(testpath(subject,fmriRun), 'WMmask.nii.gz')
     CSFmaskFileout = op.join(testpath(subject,fmriRun), 'CSFmask.nii.gz')
     GMmaskFileout = op.join(testpath(subject,fmriRun), 'GMmask.nii.gz')
@@ -190,22 +195,22 @@ def Finn_preprocess(fmriFile):
         
         # copy and alter detrendpoly3.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step1.fsf')
-        copyfile(op.join(DATADIR,'detrendpoly3.fsf'), fsfFile)
-        cmd = 'sed -i ''/set fmri(outputdir) /c\\set fmri(outputdir) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'step1'),fsfFile)
+        copyfile(op.join('detrendpoly3.fsf'), fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step1'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(tr) /c\\set fmri(tr) {:.3f}'' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(npts) /c\\set fmri(npts) {}'' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}'' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i ''/set feat_files(1) /c\\set feat_files(1) "{}"'' {}'            .format(fmriFile.replace('.nii.gz','_WMCSF.nii.gz'),fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(fmriFile.replace('.nii.gz','_WMCSF.nii.gz'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(custom1) /c\\set fmri(custom1) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_1.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_1.txt'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(custom2) /c\\set fmri(custom2) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_2.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom2) /c\\set fmri(custom2) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_2.txt'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(custom3) /c\\set fmri(custom3) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_3.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom3) /c\\set fmri(custom3) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_3.txt'),fsfFile)
         call(cmd,shell=True)
         
         # run feat
@@ -231,18 +236,18 @@ def Finn_preprocess(fmriFile):
         # ** c) use feat to regress it out **
         # copy and alter regressWMCSF.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step2.fsf')
-        copyfile(op.join(DATADIR,'regressWMCSF.fsf'), fsfFile)
-        cmd = 'sed -i ''/set fmri(outputdir) /c\\set fmri(outputdir) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'step2'),fsfFile)
+        copyfile(op.join('regressWMCSF.fsf'), fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step2'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(tr) /c\\set fmri(tr) {:.3f}'' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(npts) /c\\set fmri(npts) {}'' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}'' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i ''/set feat_files(1) /c\\set feat_files(1) "{}"'' {}'            .format(fmriFile.replace('.nii.gz','_GM.nii.gz'),fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(fmriFile.replace('.nii.gz','_GM.nii.gz'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(custom1) /c\\set fmri(custom1) "{}"'' {}'            .format(WMCSFtxtFileout,fsfFile)
+        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'            .format(WMCSFtxtFileout,fsfFile)
         call(cmd,shell=True)
         
         # run feat
@@ -274,19 +279,19 @@ def Finn_preprocess(fmriFile):
         # ** b) use feat to regress them out **
         # copy and alter regressM12.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step3.fsf')
-        copyfile(op.join(DATADIR,'regressM12.fsf'), fsfFile)
-        cmd = 'sed -i ''/set fmri(outputdir) /c\\set fmri(outputdir) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'step3'),fsfFile)
+        copyfile(op.join('regressM12.fsf'), fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step3'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(tr) /c\\set fmri(tr) {:.3f}'' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(npts) /c\\set fmri(npts) {}'' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}'' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i ''/set feat_files(1) /c\\set feat_files(1) "{}"'' {}'            .format(step12_outFile,fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(step12_outFile,fsfFile)
         call(cmd,shell=True)
         for iCol in range(len(colNames)):
-            cmd = 'sed -i ''/set fmri(custom{}) /c\\set fmri(custom{}}) "{}"'' {}'                .format(iCol,iCol,motionFile.replace('.txt','_'+colNames[iCol]+'.txt'),fsfFile)
+            cmd = 'sed -i \'/set fmri(custom{}) /c\\set fmri(custom{}}) "{}"\' {}'                .format(iCol,iCol,motionFile.replace('.txt','_'+colNames[iCol]+'.txt'),fsfFile)
             call(cmd,shell=True)   
             
         # run feat
@@ -315,22 +320,22 @@ def Finn_preprocess(fmriFile):
         # ** b) use feat to regress them out **
         # copy and alter detrendpoly3.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step5.fsf')
-        copyfile(op.join(DATADIR,'detrendpoly3.fsf'), fsfFile)
-        cmd = 'sed -i ''/set fmri(outputdir) /c\\set fmri(outputdir) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'step5'),fsfFile)
+        copyfile(op.join('detrendpoly3.fsf'), fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step5'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(tr) /c\\set fmri(tr) {:.3f}'' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(npts) /c\\set fmri(npts) {}'' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}'' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i ''/set feat_files(1) /c\\set feat_files(1) "{}"'' {}'            .format(step4_outFile.replace('.nii.gz','_GM.nii.gz'),fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(step4_outFile.replace('.nii.gz','_GM.nii.gz'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(custom1) /c\\set fmri(custom1) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_1.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_1.txt'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(custom2) /c\\set fmri(custom2) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_2.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom2) /c\\set fmri(custom2) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_2.txt'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(custom3) /c\\set fmri(custom3) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_3.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom3) /c\\set fmri(custom3) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_3.txt'),fsfFile)
         call(cmd,shell=True)
         
         # run feat
@@ -358,18 +363,18 @@ def Finn_preprocess(fmriFile):
         # ** c) use feat to regress it out
         # copy and alter regressWMCSF.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step6.fsf')
-        copyfile(op.join(DATADIR,'regressWMCSF.fsf'), fsfFile)
-        cmd = 'sed -i ''/set fmri(outputdir) /c\\set fmri(outputdir) "{}"'' {}'            .format(op.join(testpath(subject,fmriRun),'step6'),fsfFile)
+        copyfile(op.join('regressWMCSF.fsf'), fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step6'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(tr) /c\\set fmri(tr) {:.3f}'' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(npts) /c\\set fmri(npts) {}'' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}'' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i ''/set feat_files(1) /c\\set feat_files(1) "{}"'' {}'            .format(step5_outFile,fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(step5_outFile,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i ''/set fmri(custom1) /c\\set fmri(custom1) "{}"'' {}'            .format(WMCSFGMtxtFileout,fsfFile)
+        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'            .format(WMCSFGMtxtFileout,fsfFile)
         call(cmd,shell=True)
         
         # run feat
@@ -535,8 +540,13 @@ for iSub in range(len(subjects)):
             excludeSub.append(iSub)
             continue
         
-        if not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'.txt')))         or not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'._GMtxt')))         or overwrite:
+        if not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'.txt')))         or not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'._GM.txt')))         or overwrite:
             print 'load and preprocess'
+            if isTest and not op.isfile(testpath(str(subjects[iSub]),thisRun+'_'+PEdir)) and not op.isfile(testpath(str(subjects[iSub]),thisRun+'_'+PEdir)):
+                try:
+                    mktestdirs(str(subjects[iSub]),thisRun)
+		except Exception as e:
+		    print 'isTest:',isTest
             Finn_loadandpreprocess(fmriFile, parcellation, overwrite)
         else:
             print subject[iSub], ' : ', PEdir, 'results already computed; skipping'
