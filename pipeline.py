@@ -199,9 +199,9 @@ def Finn_preprocess(fmriFile):
         # ** b) use feat to regress them out
         # keep only WM/CSF voxels to speed things up
         WMCSFmaskFile = op.join(testpath(subject,fmriRun),'WMCSFmask.nii.gz')
-        if not op.isfile(fmriFile.replace('.nii.gz','_WMCSF.nii.gz')):
+        if not op.isfile(op.join(testpath(subject,fmriRun),fmriRun+'_WMCSF.nii.gz')):
             mymask1 = fsl.maths.ApplyMask(in_file=fmriFile, mask_file=WMCSFmaskFile,
-					  out_file=fmriFile.replace('.nii.gz','_WMCSF.nii.gz'))
+					  out_file=op.join(testpath(subject,fmriRun),fmriRun+'_WMCSF.nii.gz'))
             mymask1.run()
         
         # copy and alter detrendpoly3.fsf
@@ -220,7 +220,7 @@ def Finn_preprocess(fmriFile):
 	.format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
         cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'\
-	.format(fmriFile.replace('.nii.gz','_WMCSF.nii.gz'),fsfFile)
+	.format(op.join(testpath(subject,fmriRun),fmriRun+'_WMCSF.nii.gz'),fsfFile)
         call(cmd,shell=True)
         cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'\
 	.format(op.join(testpath(subject,fmriRun),'poly_detrend_1.txt'),fsfFile)
@@ -252,7 +252,7 @@ def Finn_preprocess(fmriFile):
         GMmaskFile = op.join(testpath(subject,fmriRun),'GMmask.nii.gz')
         if not op.isfile(GMmaskFile):
             mymask2 = fsl.maths.ApplyMask(in_file=fmriFile, mask_file=GMmaskFile,
-					  out_file=fmriFile.replace('.nii.gz','_GM.nii.gz'))
+					  out_file=op.join(testpath(subject,fmriRun),fmriRun+'_GM.nii.gz'))
             mymask2.run()
         
         # ** c) use feat to regress it out **
@@ -272,7 +272,7 @@ def Finn_preprocess(fmriFile):
 	.format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
         cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'\
-	.format(fmriFile.replace('.nii.gz','_GM.nii.gz'),fsfFile)
+	.format(op.join(testpath(subject,fmriRun),fmriRun+'_GM.nii.gz'),fsfFile)
         call(cmd,shell=True)
         cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'\
 	.format(WMCSFtxtFileout,fsfFile)
