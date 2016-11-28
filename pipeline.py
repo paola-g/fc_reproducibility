@@ -79,10 +79,14 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         with open('eye.mat','w') as fid:
             fid.write('1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1')
         
-        flirt_ribbon = fsl.FLIRT(in_file=ribbonFilein, out_file=ribbonFileout,            reference=fmriFile, apply_xfm=True,            in_matrix_file='eye.mat', interp='nearestneighbour')
+        flirt_ribbon = fsl.FLIRT(in_file=ribbonFilein, out_file=ribbonFileout,
+				 reference=fmriFile, apply_xfm=True,
+				 in_matrix_file='eye.mat', interp='nearestneighbour')
         flirt_ribbon.run()
 
-        flirt_wmparc = fsl.FLIRT(in_file=wmparcFilein, out_file=wmparcFileout,            reference=fmriFile, apply_xfm=True,            in_matrix_file='eye.mat', interp='nearestneighbour')
+        flirt_wmparc = fsl.FLIRT(in_file=wmparcFilein, out_file=wmparcFileout,
+				 reference=fmriFile, apply_xfm=True,
+				 in_matrix_file='eye.mat', interp='nearestneighbour')
         flirt_wmparc.run()
         
         # load nii (ribbon & wmparc)
@@ -111,10 +115,15 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         wmparcCSFstructures = [4, 5, 14, 15, 24, 31, 43, 44, 63]
         
         # make masks
-        WMmask = np.double(np.in1d(ribbon, ribbonWMstructures).tolist() or                            np.in1d(wmparc, wmparcWMstructures).tolist() or                            np.in1d(wmparc, wmparcCCstructures).tolist() and                            not np.in1d(wmparc, wmparcCSFstructures).tolist() and                            not np.in1d(wmparc, wmparcGMstructures).tolist())
+        WMmask = np.double(np.in1d(ribbon, ribbonWMstructures).tolist() or \
+			   np.in1d(wmparc, wmparcWMstructures).tolist() or \
+			   np.in1d(wmparc, wmparcCCstructures).tolist() and \
+			   not np.in1d(wmparc, wmparcCSFstructures).tolist() and \
+			   not np.in1d(wmparc, wmparcGMstructures).tolist())
         CSFmask = np.double(np.in1d(wmparc, wmparcCSFstructures))
         WMCSFmask = np.double((WMmask > 0) | (CSFmask > 0))
-        GMmask = np.double(np.in1d(ribbon,ribbonGMstrucures).tolist() or         np.in1d(wmparc,wmparcGMstructures).tolist())
+        GMmask = np.double(np.in1d(ribbon,ribbonGMstrucures).tolist() or \
+			   np.in1d(wmparc,wmparcGMstructures).tolist())
         WMCSFGMmask = np.double((WMmask > 0) | (CSFmask > 0) | (GMmask > 0))
         
         # write masks
@@ -184,37 +193,48 @@ def Finn_preprocess(fmriFile):
         
         # Print out text file for each polynomial to be used as a regressor
         for i in num_pol:
-            np.savetxt(op.join(testpath(subject,fmriRun),                        'poly_detrend_' + str(i+1) + '.txt'), y[i],fmt='%0.02f')
+            np.savetxt(op.join(testpath(subject,fmriRun),
+			       'poly_detrend_' + str(i+1) + '.txt'), y[i],fmt='%0.02f')
             
         # ** b) use feat to regress them out
         # keep only WM/CSF voxels to speed things up
         WMCSFmaskFile = op.join(testpath(subject,fmriRun),'WMCSFmask.nii.gz')
         if not op.isfile(fmriFile.replace('.nii.gz','_WMCSF.nii.gz')):
-            mymask1 = fsl.maths.ApplyMask(in_file=fmriFile, mask_file=WMCSFmaskFile,                                               out_file=fmriFile.replace('.nii.gz','_WMCSF.nii.gz'))
+            mymask1 = fsl.maths.ApplyMask(in_file=fmriFile, mask_file=WMCSFmaskFile,
+					  out_file=fmriFile.replace('.nii.gz','_WMCSF.nii.gz'))
             mymask1.run()
         
         # copy and alter detrendpoly3.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step1.fsf')
         copyfile(op.join('detrendpoly3.fsf'), fsfFile)
-        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step1'),fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'step1'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
+	.format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'\
+	.format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'\
+	.format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(fmriFile.replace('.nii.gz','_WMCSF.nii.gz'),fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'\
+	.format(fmriFile.replace('.nii.gz','_WMCSF.nii.gz'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_1.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'poly_detrend_1.txt'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(custom2) /c\\set fmri(custom2) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_2.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom2) /c\\set fmri(custom2) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'poly_detrend_2.txt'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(custom3) /c\\set fmri(custom3) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_3.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom3) /c\\set fmri(custom3) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'poly_detrend_3.txt'),fsfFile)
         call(cmd,shell=True)
         
         # run feat
-        step1_outFile = op.join(testpath(subject,fmriRun),                               'step1.feat','stats','res4d.nii.gz')
+        step1_outFile = op.join(testpath(subject,fmriRun),
+				'step1.feat','stats','res4d.nii.gz')
         if not op.isfile(step1_outFile):
             myfeat1 = fsl.FEAT(fsf_file=fsfFile,terminal_output='none')
             myfeat1.run()
@@ -222,7 +242,8 @@ def Finn_preprocess(fmriFile):
         ## 2. Regress CSF/WM signal from gray matter voxels
         print 'Step 2 (regress WMCSF signal from GM)'
         # ** a) extract the WM/CSF data from the detrended volume
-        WMCSFtxtFileout = op.join(testpath(subject,fmriRun),                                  'step1.feat','stats','WMCSF.txt')
+        WMCSFtxtFileout = op.join(testpath(subject,fmriRun),
+				  'step1.feat','stats','WMCSF.txt')
         if not op.isfile(WMCSFtxtFileout):
             meants1 = fsl.ImageMeants(in_file=step1_outFile, out_file=WMCSFtxtFileout, mask=WMCSFmaskFile)
             meants1.run()
@@ -230,28 +251,36 @@ def Finn_preprocess(fmriFile):
         # ** b) keep only GM voxels to speed things up
         GMmaskFile = op.join(testpath(subject,fmriRun),'GMmask.nii.gz')
         if not op.isfile(GMmaskFile):
-            mymask2 = fsl.maths.ApplyMask(in_file=fmriFile, mask_file=GMmaskFile,                                               out_file=fmriFile.replace('.nii.gz','_GM.nii.gz'))
+            mymask2 = fsl.maths.ApplyMask(in_file=fmriFile, mask_file=GMmaskFile,
+					  out_file=fmriFile.replace('.nii.gz','_GM.nii.gz'))
             mymask2.run()
         
         # ** c) use feat to regress it out **
         # copy and alter regressWMCSF.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step2.fsf')
         copyfile(op.join('regressWMCSF.fsf'), fsfFile)
-        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step2'),fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'step2'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
+	.format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'\
+	.format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'\
+	.format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(fmriFile.replace('.nii.gz','_GM.nii.gz'),fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'\
+	.format(fmriFile.replace('.nii.gz','_GM.nii.gz'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'            .format(WMCSFtxtFileout,fsfFile)
+        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'\
+	.format(WMCSFtxtFileout,fsfFile)
         call(cmd,shell=True)
         
         # run feat
-        step2_outFile = op.join(testpath(subject,fmriRun),                               'step2.feat','stats','res4d.nii.gz')
+        step2_outFile = op.join(testpath(subject,fmriRun),
+				'step2.feat','stats','res4d.nii.gz')
         if not op.isfile(step2_outFile):
             myfeat2 = fsl.FEAT(fsf_file=fsfFile,terminal_output='none')
             myfeat2.run()
@@ -260,14 +289,16 @@ def Finn_preprocess(fmriFile):
         # add the results of steps 1 & 2 for input to the next stage
         step12_outFile = op.join(testpath(subject,fmriRun),'step1+2.nii.gz')
         if not op.isfile(step12_outFile):
-            myadd1 = fsl.maths.BinaryMaths(in_file=step1_outFile, operation='add',                                         operand_file=step2_outFile, out_file=step12_outFile)
+            myadd1 = fsl.maths.BinaryMaths(in_file=step1_outFile, operation='add',
+					   operand_file=step2_outFile, out_file=step12_outFile)
             myadd1.run()
             
         ## 3. Regress motion parameters (found in the Movement_Regressors_dt_txt
         # file from HCP)    
         print 'Step 3 (regress 12 motion parameters from whole brain)'
         # ** a) load the detrended motion parameters
-        motionFile = op.join(testpath(subject,fmriRun),                            'Movement_Regressors_dt.txt')
+        motionFile = op.join(testpath(subject,fmriRun),
+			     'Movement_Regressors_dt.txt')
         # this needs to be split into columns
         colNames = ['mmx','mmy','mmz','degx','degy','degz','dmmx','dmmy','dmmz','ddegx','ddegy','ddegz']
         df = pd.read_csv(motionFile,delim_whitespace=True,header=None)
@@ -280,22 +311,29 @@ def Finn_preprocess(fmriFile):
         # copy and alter regressM12.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step3.fsf')
         copyfile(op.join('regressM12.fsf'), fsfFile)
-        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step3'),fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'step3'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
+	.format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'\
+	.format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'\
+	.format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(step12_outFile,fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'\
+	.format(step12_outFile,fsfFile)
         call(cmd,shell=True)
         for iCol in range(len(colNames)):
-            cmd = 'sed -i \'/set fmri(custom{}) /c\\set fmri(custom{}}) "{}"\' {}'                .format(iCol,iCol,motionFile.replace('.txt','_'+colNames[iCol]+'.txt'),fsfFile)
+            cmd = 'sed -i \'/set fmri(custom{}) /c\\set fmri(custom{}}) "{}"\' {}'\
+	    .format(iCol,iCol,motionFile.replace('.txt','_'+colNames[iCol]+'.txt'),fsfFile)
             call(cmd,shell=True)   
             
         # run feat
-        step3_outFile = op.join(testpath(subject,fmriRun),                               'step3.feat','stats','res4d.nii.gz')
+        step3_outFile = op.join(testpath(subject,fmriRun),
+				'step3.feat','stats','res4d.nii.gz')
         if not op.isfile(step3_outFile):
             myfeat3 = fsl.FEAT(fsf_file=fsfFile,terminal_output='none')
             myfeat3.run()
@@ -310,36 +348,47 @@ def Finn_preprocess(fmriFile):
         print ('Step 5 (detrend gray matter voxels, polynomial order 3)')
         GMmaskfile = op.join(testpath(subject,fmriRun),'GMmask.nii.gz')
         if not op.isfile(step4_outFile.replace('.nii.gz','_GM.nii.gz')):
-            mymask3 = fsl.maths.ApplyMask(in_file=step4_outFile, mask_file=GMmaskFile,                                               out_file=step4_outFile.replace('.nii.gz','_GM.nii.gz'))
+            mymask3 = fsl.maths.ApplyMask(in_file=step4_outFile, mask_file=GMmaskFile,
+					  out_file=step4_outFile.replace('.nii.gz','_GM.nii.gz'))
             mymask3.run()
         WMCSFmaskFile = op.join(testpath(subject,fmriRun),'WMCSFmask.nii.gz') 
         if not op.isfile(step4_outFile.replace('.nii.gz','_WMCSF.nii.gz')):
-            mymask4 = fsl.maths.ApplyMask(in_file=step4_outFile, mask_file=WMCSFmaskFile,                                               out_file=step4_outFile.replace('.nii.gz','_WMCSF.nii.gz'))
+            mymask4 = fsl.maths.ApplyMask(in_file=step4_outFile, mask_file=WMCSFmaskFile,
+					  out_file=step4_outFile.replace('.nii.gz','_WMCSF.nii.gz'))
             mymask4.run()
         
         # ** b) use feat to regress them out **
         # copy and alter detrendpoly3.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step5.fsf')
         copyfile(op.join('detrendpoly3.fsf'), fsfFile)
-        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step5'),fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'step5'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
+	.format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'\
+	.format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'\
+	.format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(step4_outFile.replace('.nii.gz','_GM.nii.gz'),fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'\
+	.format(step4_outFile.replace('.nii.gz','_GM.nii.gz'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_1.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'poly_detrend_1.txt'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(custom2) /c\\set fmri(custom2) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_2.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom2) /c\\set fmri(custom2) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'poly_detrend_2.txt'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(custom3) /c\\set fmri(custom3) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'poly_detrend_3.txt'),fsfFile)
+        cmd = 'sed -i \'/set fmri(custom3) /c\\set fmri(custom3) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'poly_detrend_3.txt'),fsfFile)
         call(cmd,shell=True)
         
         # run feat
-        step5tmp_outFile = op.join(testpath(subject,fmriRun),                               'step5.feat','stats','res4d.nii.gz')
+        step5tmp_outFile = op.join(testpath(subject,fmriRun),
+				   'step5.feat','stats','res4d.nii.gz')
         if not op.isfile(step5tmp_outFile):
             myfeat4 = fsl.FEAT(fsf_file=fsfFile,terminal_output='none')
             myfeat4.run()
@@ -347,7 +396,8 @@ def Finn_preprocess(fmriFile):
         # add the WMCSF voxels back in for input to the next stage
         step5_outFile = op.join(testpath(subject,fmriRun),'step5.nii.gz')
         if not op.isfile(step5_outFile):
-            myadd2 = fsl.maths.BinaryMaths(in_file=step5tmp_outFile, operation='add',                operand_file=step4_outFile.replace('.nii.gz','_WMCSF.nii.gz'), out_file=step5_outFile)
+            myadd2 = fsl.maths.BinaryMaths(in_file=step5tmp_outFile, operation='add',
+					   operand_file=step4_outFile.replace('.nii.gz','_WMCSF.nii.gz'), out_file=step5_outFile)
             myadd2.run()
             
         ## 6. Regress global mean (mask includes all voxels in brain mask,
@@ -355,7 +405,8 @@ def Finn_preprocess(fmriFile):
         print 'Step 6 (GSR)'
         # ** a) extract the WM/CSF/GM data from detrended volume
         WMCSFGMmaskFile = op.join(testpath(subject,fmriRun),'WMCSFGM.nii.gz')
-        WMCSFGMtxtFileout = op.join(testpath(subject,fmriRun),                                   'step5.feat','stats','WMCSFGM.txt')
+        WMCSFGMtxtFileout = op.join(testpath(subject,fmriRun),
+				    'step5.feat','stats','WMCSFGM.txt')
         if not op.isfile(WMCSFGMtxtFileout):
             meants2 = fsl.ImageMeants(in_file=step5_outFile, out_file=WMCSFGMtxtFileout, mask=WMCSFGMmaskFile)
             meants2.run()
@@ -364,27 +415,35 @@ def Finn_preprocess(fmriFile):
         # copy and alter regressWMCSF.fsf
         fsfFile = op.join(testpath(subject,fmriRun), 'step6.fsf')
         copyfile(op.join('regressWMCSF.fsf'), fsfFile)
-        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step6'),fsfFile)
+        cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
+	.format(op.join(testpath(subject,fmriRun),'step6'),fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'            .format(TR,fsfFile)
+        cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
+	.format(TR,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'            .format(nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(npts) /c\\set fmri(npts) {}\' {}'\
+	.format(nTRs,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'            .format(dim1*dim2*dim3*nTRs,fsfFile)
+        cmd = 'sed -i \'/set fmri(totalVoxels) /c\\set fmri(totalVoxels) {}\' {}'\
+	.format(dim1*dim2*dim3*nTRs,fsfFile)
         call(cmd,shell=True) 
-        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'            .format(step5_outFile,fsfFile)
+        cmd = 'sed -i \'/set feat_files(1) /c\\set feat_files(1) "{}"\' {}'\
+	.format(step5_outFile,fsfFile)
         call(cmd,shell=True)
-        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'            .format(WMCSFGMtxtFileout,fsfFile)
+        cmd = 'sed -i \'/set fmri(custom1) /c\\set fmri(custom1) "{}"\' {}'\
+	.format(WMCSFGMtxtFileout,fsfFile)
         call(cmd,shell=True)
         
         # run feat
-        step6_outFile = op.join(testpath(subject,fmriRun),                               'step6.feat','stats','res4d.nii.gz')
+        step6_outFile = op.join(testpath(subject,fmriRun),
+				'step6.feat','stats','res4d.nii.gz')
         if not op.isfile(step6_outFile):
             myfeat5 = fsl.FEAT(fsf_file=fsfFile,terminal_output='none')
             myfeat5.run()
             
         ## We're done! Copy the resulting file
-        copyfile(step6_outFile,op.join(testpath(subject,fmriRun),                                      fmriRun+'_FinnPrepro.nii.gz'))
+        copyfile(step6_outFile,op.join(testpath(subject,fmriRun),
+				       fmriRun+'_FinnPrepro.nii.gz'))
         
             
 
@@ -409,7 +468,8 @@ def Finn_loadandpreprocess(fmriFile, parcellation, overwrite):
         parcelMaskFile = op.join(PARCELDIR,parcellation,'parcel{:03d}.nii.gz'.format(iParcel))
         if not op.isfile(parcelMaskFile):
             print 'Making a binary volume mask for each parcel'
-            mymaths = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, parcellation,'fconn_atlas_150_2mm.nii'),                out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel-0.1, iParcel+0.1)) 
+            mymaths = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, parcellation,'fconn_atlas_150_2mm.nii'),
+					     out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel-0.1, iParcel+0.1)) 
             mymaths.run()
     if not op.isfile(fmriFile):
         print fmriFile, 'does not exist'
@@ -440,7 +500,8 @@ def Finn_loadandpreprocess(fmriFile, parcellation, overwrite):
             GMmaskFile = op.join(testpath(subject,fmriRun),'GMMask.nii.gz')
             # intersect GM & parcel
             parcelGMMaskFile = op.join(subjectParcelDir,parcellation,'GMparcel{:03d}.nii'.format(iParcel))
-            mymaths = fsl.maths.MathsCommand(in_file=parcelMaskFile,                out_file=parcelGMMaskFile, args='-mul '+GMmaskFile)
+            mymaths = fsl.maths.MathsCommand(in_file=parcelMaskFile,
+					     out_file=parcelGMMaskFile, args='-mul '+GMmaskFile)
             mymaths.run()
             tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel))
             if not op.isfile(tsFile):
@@ -478,7 +539,9 @@ else:
     sys.exit("Invalid release code")
     
 # select subjects that have completed all fMRI
-ind = ind & ((df['fMRI_WM_Compl']== True) & (df['fMRI_Mot_Compl']==True)         & (df['fMRI_Lang_Compl']==True) & (df['fMRI_Emo_Compl']==True)         & (df['RS-fMRI_Count']==4))
+ind = ind & ((df['fMRI_WM_Compl']== True) & (df['fMRI_Mot_Compl']==True) \
+	     & (df['fMRI_Lang_Compl']==True) & (df['fMRI_Emo_Compl']==True) \
+	     & (df['RS-fMRI_Count']==4))
                 
 df = df[ind]  
 
@@ -534,13 +597,16 @@ for iSub in range(len(subjects)):
      
     for iPEdir in range(len(PEdirs)):
         PEdir=PEdirs[iPEdir]
-        fmriFile = op.join(buildpath(str(subjects[iSub]),thisRun+'_'+PEdir),                           thisRun+'_'+PEdir+suffix+'.nii.gz')
+        fmriFile = op.join(buildpath(str(subjects[iSub]),thisRun+'_'+PEdir),
+			   thisRun+'_'+PEdir+suffix+'.nii.gz')
         if not op.isfile(fmriFile):
             print str(subjects[iSub]), 'missing', fmriFile, ', exclude'
             excludeSub.append(iSub)
             continue
         
-        if not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'.txt')))         or not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'._GM.txt')))         or overwrite:
+        if not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'.txt'))) \
+	or not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'._GM.txt'))) \
+	or overwrite:
             print 'load and preprocess'
             if isTest and not op.isfile(testpath(str(subjects[iSub]),thisRun+'_'+PEdir)) and not op.isfile(testpath(str(subjects[iSub]),thisRun+'_'+PEdir)):
                 try:
