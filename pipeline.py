@@ -208,7 +208,7 @@ def Finn_preprocess(fmriFile):
         fsfFile = op.join(testpath(subject,fmriRun), 'step1.fsf')
         copyfile(op.join('detrendpoly3.fsf'), fsfFile)
         cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
-	.format(op.join(testpath(subject,fmriRun),'step1'),fsfFile)
+	.format(op.join(testpath(subject,fmriRun),'step1.feat'),fsfFile)
         call(cmd,shell=True)
         cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
 	.format(TR,fsfFile)
@@ -250,7 +250,7 @@ def Finn_preprocess(fmriFile):
         
         # ** b) keep only GM voxels to speed things up
         GMmaskFile = op.join(testpath(subject,fmriRun),'GMmask.nii.gz')
-        if not op.isfile(GMmaskFile):
+        if not op.isfile(op.join(testpath(subject,fmriRun),fmriRun+'_GM.nii.gz')):
             mymask2 = fsl.maths.ApplyMask(in_file=fmriFile, mask_file=GMmaskFile,
 					  out_file=op.join(testpath(subject,fmriRun),fmriRun+'_GM.nii.gz'))
             mymask2.run()
@@ -260,7 +260,7 @@ def Finn_preprocess(fmriFile):
         fsfFile = op.join(testpath(subject,fmriRun), 'step2.fsf')
         copyfile(op.join('regressWMCSF.fsf'), fsfFile)
         cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
-	.format(op.join(testpath(subject,fmriRun),'step2'),fsfFile)
+	.format(op.join(testpath(subject,fmriRun),'step2.feat'),fsfFile)
         call(cmd,shell=True)
         cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
 	.format(TR,fsfFile)
@@ -297,7 +297,7 @@ def Finn_preprocess(fmriFile):
         # file from HCP)    
         print 'Step 3 (regress 12 motion parameters from whole brain)'
         # ** a) load the detrended motion parameters
-        motionFile = op.join(testpath(subject,fmriRun),
+        motionFile = op.join(buildpath(subject,fmriRun),
 			     'Movement_Regressors_dt.txt')
         # this needs to be split into columns
         colNames = ['mmx','mmy','mmz','degx','degy','degz','dmmx','dmmy','dmmz','ddegx','ddegy','ddegz']
@@ -312,7 +312,7 @@ def Finn_preprocess(fmriFile):
         fsfFile = op.join(testpath(subject,fmriRun), 'step3.fsf')
         copyfile(op.join('regressM12.fsf'), fsfFile)
         cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
-	.format(op.join(testpath(subject,fmriRun),'step3'),fsfFile)
+	.format(op.join(testpath(subject,fmriRun),'step3.feat'),fsfFile)
         call(cmd,shell=True)
         cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
 	.format(TR,fsfFile)
@@ -327,8 +327,8 @@ def Finn_preprocess(fmriFile):
 	.format(step12_outFile,fsfFile)
         call(cmd,shell=True)
         for iCol in range(len(colNames)):
-            cmd = 'sed -i \'/set fmri(custom{}) /c\\set fmri(custom{}}) "{}"\' {}'\
-	    .format(iCol,iCol,motionFile.replace('.txt','_'+colNames[iCol]+'.txt'),fsfFile)
+            cmd = 'sed -i \'/set fmri(custom{}) /c\\set fmri(custom{}) "{}"\' {}'\
+	    .format(iCol+1,iCol+1,motionFile.replace('.txt','_'+colNames[iCol]+'.txt'),fsfFile)
             call(cmd,shell=True)   
             
         # run feat
@@ -342,8 +342,9 @@ def Finn_preprocess(fmriFile):
         print 'Step 4 (temporal smoothing with Gaussian kernel)'
         step4_outFile = op.join(testpath(subject,fmriRun),'step4.nii.gz')
         if not op.isfile(step4_outFile):
-            myfilter = fsl.maths.TemporalFilter(in_file=step3_outFile,highpass_sigma=0, lowpass_sigma=1,                                               out_file=step4_outFile)
-            
+            myfilter = fsl.maths.TemporalFilter(in_file=step3_outFile,highpass_sigma=0, lowpass_sigma=1,
+						out_file=step4_outFile)
+            myfilter.run()
         ## 5. Regress temporal drift from gray matter (3rd order polynomial)
         print ('Step 5 (detrend gray matter voxels, polynomial order 3)')
         GMmaskfile = op.join(testpath(subject,fmriRun),'GMmask.nii.gz')
@@ -362,7 +363,7 @@ def Finn_preprocess(fmriFile):
         fsfFile = op.join(testpath(subject,fmriRun), 'step5.fsf')
         copyfile(op.join('detrendpoly3.fsf'), fsfFile)
         cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
-	.format(op.join(testpath(subject,fmriRun),'step5'),fsfFile)
+	.format(op.join(testpath(subject,fmriRun),'step5.feat'),fsfFile)
         call(cmd,shell=True)
         cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
 	.format(TR,fsfFile)
@@ -404,7 +405,7 @@ def Finn_preprocess(fmriFile):
         # gray matter, white matter and CSF
         print 'Step 6 (GSR)'
         # ** a) extract the WM/CSF/GM data from detrended volume
-        WMCSFGMmaskFile = op.join(testpath(subject,fmriRun),'WMCSFGM.nii.gz')
+        WMCSFGMmaskFile = op.join(testpath(subject,fmriRun),'WMCSFGMmask.nii.gz')
         WMCSFGMtxtFileout = op.join(testpath(subject,fmriRun),
 				    'step5.feat','stats','WMCSFGM.txt')
         if not op.isfile(WMCSFGMtxtFileout):
@@ -416,7 +417,7 @@ def Finn_preprocess(fmriFile):
         fsfFile = op.join(testpath(subject,fmriRun), 'step6.fsf')
         copyfile(op.join('regressWMCSF.fsf'), fsfFile)
         cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'\
-	.format(op.join(testpath(subject,fmriRun),'step6'),fsfFile)
+	.format(op.join(testpath(subject,fmriRun),'step6.feat'),fsfFile)
         call(cmd,shell=True)
         cmd = 'sed -i \'/set fmri(tr) /c\\set fmri(tr) {:.3f}\' {}'\
 	.format(TR,fsfFile)
@@ -475,7 +476,7 @@ def Finn_loadandpreprocess(fmriFile, parcellation, overwrite):
         print fmriFile, 'does not exist'
         return
     
-    tsDir = op.join(op.dirname(fmriFile),parcellation)
+    tsDir = op.join(testpath(subject,fmriRun),parcellation)
     if not op.isdir(tsDir): mkdir(tsDir)
     alltsFile = op.join(ResultsDir,subject+'_'+fmriRun+'.txt')
     alltsGMFile = op.join(ResultsDir,subject+'_'+fmriRun+'_GM.txt')
@@ -491,15 +492,16 @@ def Finn_loadandpreprocess(fmriFile, parcellation, overwrite):
             
         # calculate signal in each of the nodes by averaging across all voxels in node
         print 'Extracting mean data from',str(len(uniqueParcels)),'parcels for ',fmriFile_prepro
-        subjectParcelDir = op.join(DATADIR,subject,'MNINonLinear','Results','parcellations')
-        if not op.isdir(subjectParcelDir): mkdir(subjectParcelDir)
+        #subjectParcelDir = op.join(DATADIR,subject,'MNINonLinear','Results','parcellations')
+        subjectParcelDir = op.join(DATADIR,'Testing',subject,'Results','parcellations')
+	if not op.isdir(subjectParcelDir): mkdir(subjectParcelDir)
         if not op.isdir(op.join(subjectParcelDir,parcellation)): mkdir(op.join(subjectParcelDir,parcellation))
         
         for iParcel in range(len(uniqueParcels)):
             parcelMaskFile = op.join(PARCELDIR,parcellation,'parcel{:03d}.nii.gz'.format(iParcel))
-            GMmaskFile = op.join(testpath(subject,fmriRun),'GMMask.nii.gz')
+            GMmaskFile = op.join(testpath(subject,fmriRun),'GMmask.nii.gz')
             # intersect GM & parcel
-            parcelGMMaskFile = op.join(subjectParcelDir,parcellation,'GMparcel{:03d}.nii'.format(iParcel))
+            parcelGMMaskFile = op.join(subjectParcelDir,parcellation,'GMparcel{:03d}.nii.gz'.format(iParcel))
             mymaths = fsl.maths.MathsCommand(in_file=parcelMaskFile,
 					     out_file=parcelGMMaskFile, args='-mul '+GMmaskFile)
             mymaths.run()
