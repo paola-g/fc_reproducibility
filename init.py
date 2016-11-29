@@ -234,7 +234,7 @@ def Finn_preprocess(fmriFile):
             mymask2.run()
         
         # ** c) use feat to regress it out **
-
+	fsfFile = op.join(testpath(subject,fmriRun), 'step2.fsf')
         copyfile(op.join('regressWMCSF.fsf'), fsfFile)
         cmd = 'sed -i \'/set fmri(outputdir) /c\\set fmri(outputdir) "{}"\' {}'            .format(op.join(testpath(subject,fmriRun),'step2.feat'),fsfFile)
         call(cmd,shell=True)
