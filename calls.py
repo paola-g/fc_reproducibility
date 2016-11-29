@@ -51,7 +51,7 @@ PEdirs = ['LR', 'RL']
 RelRMSMean = np.zeros([len(subjects), 2])
 excludeSub = list()
 
-for iSub in [1]:
+for iSub in [3]:
     RelRMSMeanFile = op.join(buildpath(str(subjects[iSub]), thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
     fLR = RelRMSMeanFile.replace('zz','LR');
     fRL = RelRMSMeanFile.replace('zz','RL');
