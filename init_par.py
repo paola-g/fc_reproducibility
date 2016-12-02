@@ -10,15 +10,15 @@ import pandas as pd
 import sys
 import numpy as np
 import os.path as op
-from os import mkdir, makedirs
+from os import mkdir, makedirs, remove
 import scipy.stats as stats
 import nipype.interfaces.fsl as fsl
-from subprocess import call
+from subprocess import call, Popen
 import nibabel as nib
 from shutil import copyfile
 import pandas as pd
 import Finn_loadandpreprocess
-
+import shlex
 # ### Parameters
 
 # In[10]:
@@ -35,6 +35,8 @@ isDataClean = True
 doPlot = False
 isTest = True
 queue= True
+
+if queue: priority=-100
 
 if thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
@@ -139,5 +141,18 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         img = nib.Nifti1Image(WMCSFGMmask, ref.affine)
         nib.save(img, WMCSFGMmaskFileout)
 
-
-
+def fnSubmitToCluster(strScript, strJobFolder, strJobUID, resources):
+    specifyqueue = ''
+    # clean up .o and .e
+    tmpfname = op.join(strJobFolder,strJobUID)
+    if op.isfile(tmpfname+'.e'): remove(tmpfname+'.e')       
+    if op.isfile(tmpfname+'.o'): remove(tmpfname+'.o')       
+   
+    strCommand = 'qsub {} -cwd -V {} -N {} -e {} -o {} {}'.format(specifyqueue,resources,strJobUID,
+                      op.join(strJobFolder,strJobUID+'.e'), op.join(strJobFolder,strJobUID+'.o'), strScript)
+    # write down the command to a file in the job folder
+    with open(op.join(strJobFolder,strJobUID+'.cmd'),'w+') as hFileID:
+        hFileID.write(strCommand+'\n')
+    # execute the command
+    p = Popen(shlex.split(strCommand))
+    return p.pid 

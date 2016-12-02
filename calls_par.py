@@ -50,8 +50,8 @@ if not op.isdir(ResultsDir): mkdir(ResultsDir)
 PEdirs = ['LR', 'RL']
 RelRMSMean = np.zeros([len(subjects), 2])
 excludeSub = list()
-
-for iSub in [3]:
+joblist = []
+for iSub in [6,8]:
     RelRMSMeanFile = op.join(buildpath(str(subjects[iSub]), thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
     fLR = RelRMSMeanFile.replace('zz','LR');
     fRL = RelRMSMeanFile.replace('zz','RL');
@@ -85,9 +85,9 @@ for iSub in [3]:
 		    print 'isTest:',isTest
 	    if queue:
 		# make a script to load and preprocess that file, then save as .mat
-		mypythonfn = 'import Finn_loadandpreprocess\nFinn_loadandpreprocess({},{},{})'.format(fmriFile,parcellation,str(overwrite))
-		jobDir = op.join(tespath(str(subjects[iSub]),thisRun+'_'+PEdir),jobs)	
-		if not op.isdir(jodDir): mkdir(jobDir)
+		thispythonfn = 'import Finn_loadandpreprocess\nFinn_loadandpreprocess({},{},{})'.format(fmriFile,parcellation,str(overwrite))
+		jobDir = op.join(testpath(str(subjects[iSub]),thisRun+'_'+PEdir),'jobs')	
+		if not op.isdir(jobDir): mkdir(jobDir)
 		jobName = 's{}_{}_{}_makeFCmat'.format(subjects[iSub],thisRun,PEdir)
 		# prepare a script
 		thisScript=op.join(jobDir,jobName+'.sh')
@@ -97,8 +97,9 @@ for iSub in [3]:
 			fidw.write('python {}'.format(thispythonfn))
 		cmd='chmod 774 '+thisScript
 		call(cmd,shell=True)
-		#call to fnSubmitToCluster		
-
+		# call to fnSubmitToCluster		
+		JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=15G'.format(priority))
+		joblist.append(JobID)
 	    else:
             	Finn_loadandpreprocess(fmriFile, parcellation, overwrite)
         else:
