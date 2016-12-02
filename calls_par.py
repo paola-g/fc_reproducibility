@@ -1,3 +1,4 @@
+import os
 # ### Get subjects
 
 # In[16]:
@@ -85,9 +86,11 @@ for iSub in [6,8]:
 		    print 'isTest:',isTest
 	    if queue:
 		# make a script to load and preprocess that file, then save as .mat
-		thispythonfn = 'import Finn_loadandpreprocess\nFinn_loadandpreprocess("{}","{}",{})'.format(fmriFile,parcellation,str(overwrite))
 		jobDir = op.join(testpath(str(subjects[iSub]),thisRun+'_'+PEdir),'jobs')	
 		if not op.isdir(jobDir): mkdir(jobDir)
+		thispythonfn = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(os.getcwd())
+		thispythonfn +='from Finn_loadandpreprocess import *\nFinn_loadandpreprocess("{}","{}",{})\nEND'\
+				.format(fmriFile,parcellation,str(overwrite))
 		jobName = 's{}_{}_{}_makeFCmat'.format(subjects[iSub],thisRun,PEdir)
 		# prepare a script
 		thisScript=op.join(jobDir,jobName+'.sh')

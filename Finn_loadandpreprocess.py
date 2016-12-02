@@ -1,3 +1,5 @@
+from init_par import *
+
 def Finn_loadandpreprocess(fmriFile, parcellation, overwrite):
     subject = op.basename(op.dirname(op.dirname(op.dirname(op.dirname(fmriFile)))))
     fmriRun = op.basename(op.dirname(fmriFile))

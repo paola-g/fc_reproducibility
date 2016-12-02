@@ -17,7 +17,6 @@ from subprocess import call, Popen
 import nibabel as nib
 from shutil import copyfile
 import pandas as pd
-import Finn_loadandpreprocess
 import shlex
 # ### Parameters
 
