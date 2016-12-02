@@ -85,7 +85,7 @@ for iSub in [6,8]:
 		    print 'isTest:',isTest
 	    if queue:
 		# make a script to load and preprocess that file, then save as .mat
-		thispythonfn = 'import Finn_loadandpreprocess\nFinn_loadandpreprocess({},{},{})'.format(fmriFile,parcellation,str(overwrite))
+		thispythonfn = 'import Finn_loadandpreprocess\nFinn_loadandpreprocess("{}","{}",{})'.format(fmriFile,parcellation,str(overwrite))
 		jobDir = op.join(testpath(str(subjects[iSub]),thisRun+'_'+PEdir),'jobs')	
 		if not op.isdir(jobDir): mkdir(jobDir)
 		jobName = 's{}_{}_{}_makeFCmat'.format(subjects[iSub],thisRun,PEdir)

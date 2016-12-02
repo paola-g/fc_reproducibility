@@ -32,7 +32,7 @@ PARCELDIR = '/data/jdubois/data/HCP/MRI/parcellations'
 parcellation = 'shenetal_neuroimage2013'
 overwrite = False
 thisRun = 'rfMRI_REST1'
-isDataClean = True
+isDataClean = False
 doPlot = False
 isTest = True
 
@@ -406,10 +406,10 @@ def Finn_loadandpreprocess(fmriFile, parcellation, overwrite):
         return
     
     for iParcel in range(len(uniqueParcels)):
-        parcelMaskFile = op.join(PARCELDIR,parcellation,'parcel{:03d}.nii.gz'.format(iParcel))
+        parcelMaskFile = op.join(PARCELDIR,parcellation,'parcel{:03d}.nii.gz'.format(iParcel+1))
         if not op.isfile(parcelMaskFile):
             print 'Making a binary volume mask for each parcel'
-            mymaths = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, parcellation,'fconn_atlas_150_2mm.nii'),                out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel-0.1, iParcel+0.1)) 
+            mymaths = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, parcellation,'fconn_atlas_150_2mm.nii'),                out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel+1-0.1, iParcel+1+0.1)) 
             mymaths.run()
     if not op.isfile(fmriFile):
         print fmriFile, 'does not exist'
@@ -438,19 +438,19 @@ def Finn_loadandpreprocess(fmriFile, parcellation, overwrite):
         if not op.isdir(op.join(subjectParcelDir,parcellation)): mkdir(op.join(subjectParcelDir,parcellation))
         
         for iParcel in range(len(uniqueParcels)):
-            parcelMaskFile = op.join(PARCELDIR,parcellation,'parcel{:03d}.nii.gz'.format(iParcel))
+            parcelMaskFile = op.join(PARCELDIR,parcellation,'parcel{:03d}.nii.gz'.format(iParcel+1))
             GMmaskFile = op.join(testpath(subject,fmriRun),'GMmask.nii.gz')
             # intersect GM & parcel
-            parcelGMMaskFile = op.join(subjectParcelDir,parcellation,'GMparcel{:03d}.nii.gz'.format(iParcel))
+            parcelGMMaskFile = op.join(subjectParcelDir,parcellation,'GMparcel{:03d}.nii.gz'.format(iParcel+1))
             mymaths = fsl.maths.MathsCommand(in_file=parcelMaskFile,                out_file=parcelGMMaskFile, args='-mul '+GMmaskFile)
             mymaths.run()
-            tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel))
+            tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel+1))
             if not op.isfile(tsFile):
                 # simply average the voxels within the mask
                 meants1 = fsl.ImageMeants(in_file=fmriFile_prepro, out_file=tsFile, mask=parcelMaskFile)
                 meants1.run()
                 
-            tsFile = op.join(tsDir,'GMparcel{:03d}.txt'.format(iParcel))    
+            tsFile = op.join(tsDir,'GMparcel{:03d}.txt'.format(iParcel+1))    
             if not op.isfile(tsFile):
                 # simply average the voxels within the mask
                 meants2 = fsl.ImageMeants(in_file=fmriFile_prepro, out_file=tsFile, mask=parcelGMMaskFile)
