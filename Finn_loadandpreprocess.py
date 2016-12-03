@@ -7,6 +7,8 @@ def Finn_loadandpreprocess(fmriFile, parcellation, overwrite):
     if not op.isdir(ResultsDir): makedirs(ResultsDir)
     ResultsDir = op.join(ResultsDir,'Finn')
     if not op.isdir(ResultsDir): mkdir(ResultsDir)
+    ResultsDir = op.join(ResultsDir,parcellation)
+    if not op.isdir(ResultsDir): mkdir(ResultsDir)
 
     if parcellation=='shenetal_neuroimage2013':
         uniqueParcels = range(268)

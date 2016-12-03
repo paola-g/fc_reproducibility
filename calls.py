@@ -51,7 +51,7 @@ PEdirs = ['LR', 'RL']
 RelRMSMean = np.zeros([len(subjects), 2])
 excludeSub = list()
 
-for iSub in [3]:
+for iSub in [9]:
     RelRMSMeanFile = op.join(buildpath(str(subjects[iSub]), thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
     fLR = RelRMSMeanFile.replace('zz','LR');
     fRL = RelRMSMeanFile.replace('zz','RL');
@@ -67,7 +67,7 @@ for iSub in [3]:
             excludeSub.append(iSub)
             continue
      
-    for iPEdir in range(len(PEdirs)):
+    for iPEdir in [0]:
         PEdir=PEdirs[iPEdir]
         fmriFile = op.join(buildpath(str(subjects[iSub]),thisRun+'_'+PEdir),                           thisRun+'_'+PEdir+suffix+'.nii.gz')
         if not op.isfile(fmriFile):
