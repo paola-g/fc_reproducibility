@@ -4,6 +4,7 @@
 # ### Required libraries
 
 # In[21]:
+from __future__ import division
 import matplotlib.pyplot as plt
 import csv
 import pandas as pd
