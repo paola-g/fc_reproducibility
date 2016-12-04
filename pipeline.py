@@ -195,7 +195,7 @@ def Finn_preprocess(fmriFile):
         # Print out text file for each polynomial to be used as a regressor
         for i in num_pol:
             np.savetxt(op.join(testpath(subject,fmriRun),
-			       'poly_detrend_' + str(i+1) + '.txt'), y[i],fmt='%0.02f')
+			       'poly_detrend_' + str(i+1) + '.txt'), y[i],fmt='%.2f')
             
         # ** b) use feat to regress them out
         # keep only WM/CSF voxels to speed things up
