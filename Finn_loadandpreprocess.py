@@ -85,13 +85,13 @@ def Finn_preprocess(fmriFile):
         # get some info
         img = nib.load(fmriFile)
         hdr = img.header.structarr
-        nTRs = hdr['dim'][4]
+        nTRs = long(hdr['dim'][4])
         # retrieve TR
         TR = hdr['pixdim'][4]
         # retrieve dimensions
-        dim1 = hdr['dim'][1]
-        dim2 = hdr['dim'][2]
-        dim3 = hdr['dim'][3]
+        dim1 = long(hdr['dim'][1])
+        dim2 = long(hdr['dim'][2])
+        dim3 = long(hdr['dim'][3])
         ## DO PREPROCESSING:
         ## 1) Regress temporal drift from CSF and white matter (3rd order polynomial)
         print 'Step 1 (detrend WMCSF voxels, polynomial order 3)'
@@ -105,7 +105,7 @@ def Finn_preprocess(fmriFile):
         # Print out text file for each polynomial to be used as a regressor
         for i in num_pol:
             np.savetxt(op.join(testpath(subject,fmriRun),
-			       'poly_detrend_' + str(i+1) + '.txt'), y[i],fmt='%0.02f')
+			       'poly_detrend_' + str(i+1) + '.txt'), y[i],fmt='%.2f')
             
         # ** b) use feat to regress them out
         # keep only WM/CSF voxels to speed things up
