@@ -101,7 +101,11 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         wmparcCSFstructures = [4, 5, 14, 15, 24, 31, 43, 44, 63]
         
         # make masks
-	WMmask = np.double(np.logical_or(np.logical_or(np.in1d(ribbon, ribbonWMstructures),np.in1d(wmparc, wmparcWMstructures)),np.logical_and(np.logical_and(np.in1d(wmparc, wmparcCCstructures),np.logical_not(np.in1d(wmparc, wmparcCSFstructures))),np.logical_not(np.in1d(wmparc, wmparcGMstructures)))))
+	WMmask = np.double(np.logical_and(np.logical_and(np.logical_or(np.logical_or(np.in1d(ribbon, ribbonWMstructures),
+										      np.in1d(wmparc, wmparcWMstructures)),
+									np.in1d(wmparc, wmparcCCstructures)),
+							  np.logical_not(np.in1d(wmparc, wmparcCSFstructures))),
+					   np.logical_not(np.in1d(wmparc, wmparcGMstructures))))
         CSFmask = np.double(np.in1d(wmparc, wmparcCSFstructures))
         WMCSFmask = np.double((WMmask > 0) | (CSFmask > 0))
         GMmask = np.double(np.logical_or(np.in1d(ribbon,ribbonGMstrucures), np.in1d(wmparc,wmparcGMstructures)))
@@ -134,7 +138,6 @@ fmriRun = 'rfMRI_REST1_LR'
 
 
 makeTissueMasks(subject,fmriRun,True)
-
 
 
 
