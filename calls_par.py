@@ -63,7 +63,7 @@ for iSub in [6,8]:
         with open(fRL,'r') as tmp:
             RelRMSMean[iSub,1] = float(tmp.read())
         print '{} {:.3f} {:.3f}'.format(subjects[iSub], RelRMSMean[iSub,0], RelRMSMean[iSub,1])
-        if np.mean(RelRMSMean[iSub,:]) > 0.141:
+        if np.mean(RelRMSMean[iSub,:]) > 0.14:
             print subjects[iSub], ': too much motion, exclude'
             excludeSub.append(iSub)
             continue
