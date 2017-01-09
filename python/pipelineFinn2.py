@@ -48,7 +48,7 @@ queue = False
 useFeat = False
 preproOnly = True
 doTsmooth = True
-normalize = 'zscore'
+normalize = 'keepMean'
 isCifti = False
 if thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
@@ -260,7 +260,6 @@ else:
     outFilePath = op.join(buildpath(subject, fmriRun), fmriRun+'.nii')
     
     with gzip.open(fmriFile, 'rb') as fFile:
-	#decompressedFile = gzip.GzipFile(fileobj=fFile)
 	outFilePath = op.join(buildpath(subject, fmriRun), fmriRun+'.nii')
 	with open(outFilePath, 'wb') as outfile:
 	    outfile.write(fFile.read())
@@ -273,14 +272,7 @@ data = np.memmap(volFile, dtype=img.header.get_data_dtype(), mode='c', order='F'
 
 nRows, nCols, nSlices, nTRs = img.header.get_data_shape()
 niiImg = data.reshape([nRows*nCols*nSlices, nTRs], order='F')
-
-#niiImg[np.isnan(niiImg)] = 0
-#fmax = np.finfo(np.float32).max
-#niiImg[np.isneginf(niiImg)] = -fmax
-#niiImg[np.isposinf(niiImg)] = fmax
-
 niiImg = niiImg[maskAll,:]
-
 
 niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
 niiimg[maskAll,:] = niiImg
@@ -315,7 +307,6 @@ for i in range(N):
 	niiImgWMCSF[i,:] = resid
 	
 niiImg[np.logical_or(maskWM_,maskCSF_),:] = niiImgWMCSF
-print niiImg.shape
 del niiImgWMCSF
     
 niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
@@ -336,13 +327,12 @@ meanCSF = np.mean(np.float64(niiImg[maskCSF_,:]),axis=0)
 meanCSF = meanCSF - np.mean(meanCSF)
 meanCSF = meanCSF/max(meanCSF)
 X  = np.concatenate((np.ones([nTRs,1]), meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
-print meanWM, meanCSF, X
 if not isCifti:
     niiImgGM = niiImg[maskGM_,:]
 else:
     niiImgGM = np.genfromtxt(op.join(buildpath(subject,fmriRun),'.tsv'))
     if normalize == 'zscore':
-	niiImgGM = stats.zscore(niiImgGM)
+	niiImgGM = stats.zscore(niiImgGM, ddof=1)
     elif normalize == 'pcSigCh':
 	niiImgGM = 100 * (niiImgGM - np.mean(niiImgGM,axis=0)) / np.mean(niiImgGM,axis=0)
 
