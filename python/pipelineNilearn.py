@@ -77,19 +77,19 @@ invimg2.to_filename('rwmcsf_img.nii')
 
 masker3 = NiftiMasker(mask_img=invmaskWM)
 fmri_masked3 = masker3.fit_transform(invimg2)
-meanWM = np.mean(np.float64(fmri_masked3),axis=0)
+meanWM = np.mean(np.float64(fmri_masked3),axis=1)
 meanWM = meanWM - np.mean(meanWM)
 meanWM = meanWM/max(meanWM)
 
 masker4 = NiftiMasker(mask_img=invmaskCSF)
 fmri_masked4 = masker4.fit_transform(invimg2)
-meanCSF = np.mean(np.float64(fmri_masked4),axis=0)
+meanCSF = np.mean(np.float64(fmri_masked4),axis=1)
 meanCSF = meanCSF - np.mean(meanCSF)
 meanCSF = meanCSF/max(meanCSF)
 
 X  = np.concatenate((np.ones([nTRs,1]), meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
 masker5 = NiftiMasker(mask_img=invmaskGM, detrend=True)
-fmri_masked5 = masker5.fit_trnasform(invimg2, confounds=X)
-fmri_masked[:,maskGm_] = fmri_masked5
+fmri_masked5 = masker5.fit_transform(invimg2, confounds=X)
+fmri_masked[:,np.squeeze(np.where(maskGM_))] = fmri_masked5
 invimg3 = masker.inverse_transform(fmri_masked)
 invimg3.to_filename('rwmcsf_gm_img.nii')
