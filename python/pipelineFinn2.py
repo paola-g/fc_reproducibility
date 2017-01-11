@@ -48,7 +48,7 @@ queue = False
 useFeat = False
 preproOnly = True
 doTsmooth = True
-normalize = 'pcSigCh'
+normalize = 'keepMean'
 isCifti = False
 if thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
@@ -285,7 +285,7 @@ if normalize == 'zscore':
     niiImg = stats.zscore(niiImg, axis=1, ddof=1)
     print niiImg.shape
 elif normalize == 'pcSigCh':
-    niiImg = 100 * (niiImg - np.mean(niiImg,axis=0)) / np.mean(niiImg,axis=0)
+    niiImg = 100 * (niiImg - np.mean(niiImg,axis=1)[:,np.newaxis]) / np.mean(niiImg,axis=1)[:,np.newaxis]
 
 niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
 niiimg[maskAll,:] = niiImg
@@ -334,7 +334,7 @@ else:
     if normalize == 'zscore':
 	niiImgGM = stats.zscore(niiImgGM, axis=1, ddof=1)
     elif normalize == 'pcSigCh':
-	niiImgGM = 100 * (niiImgGM - np.mean(niiImgGM,axis=0)) / np.mean(niiImgGM,axis=0)
+	niiImgGM = 100 * (niiImgGM - np.mean(niiImgGM,axis=1)) / np.mean(niiImgGM,axis=1)
 niiImgGM[np.isnan(niiImgGM)] = 0
 N = niiImgGM.shape[0]
 for i in range(N):
