@@ -48,7 +48,7 @@ queue = False
 useFeat = False
 preproOnly = True
 doTsmooth = True
-normalize = 'keepMean'
+normalize = 'pcSigCh'
 isCifti = False
 if thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
@@ -282,7 +282,7 @@ nib.save(newimg,'test/step0.nii')
 del niiimg 
 
 if normalize == 'zscore':
-    niiImg = stats.zscore(niiImg)
+    niiImg = stats.zscore(niiImg, axis=1, ddof=1)
     print niiImg.shape
 elif normalize == 'pcSigCh':
     niiImg = 100 * (niiImg - np.mean(niiImg,axis=0)) / np.mean(niiImg,axis=0)
@@ -332,10 +332,10 @@ if not isCifti:
 else:
     niiImgGM = np.genfromtxt(op.join(buildpath(subject,fmriRun),'.tsv'))
     if normalize == 'zscore':
-	niiImgGM = stats.zscore(niiImgGM, ddof=1)
+	niiImgGM = stats.zscore(niiImgGM, axis=1, ddof=1)
     elif normalize == 'pcSigCh':
 	niiImgGM = 100 * (niiImgGM - np.mean(niiImgGM,axis=0)) / np.mean(niiImgGM,axis=0)
-
+niiImgGM[np.isnan(niiImgGM)] = 0
 N = niiImgGM.shape[0]
 for i in range(N):
     fit = np.linalg.lstsq(X, niiImgGM[i,:].T)[0]
