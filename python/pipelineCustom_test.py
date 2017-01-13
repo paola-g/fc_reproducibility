@@ -73,7 +73,9 @@ def legendre_poly(order, nTRs):
 
 def load_img(fmriFile):
     if isCifti:
-        toUnzip = fmriFileOrig.replace('_Atlas.dtseries.nii','.nii.gz')
+        toUnzip = fmriFile.replace('_Atlas.dtseries.nii','.nii.gz')
+        cmd = 'wb_command -cifti-convert -to-text {} {}'.format(fmriFile,op.join(buildpath(subject,fmriRun),'.tsv'))
+        call(cmd,shell=True)
     else:
         toUnzip = fmriFile
 
@@ -93,7 +95,7 @@ def load_img(fmriFile):
     nRows, nCols, nSlices, nTRs = img.header.get_data_shape()
     niiImg = data.reshape([nRows*nCols*nSlices, nTRs], order='F')
     niiImg = niiImg[maskAll,:]
-    return niiImg
+    return niiImg, nRows, nCols, nSlices, nTRs, img.affine
 
 def plot_hist(score,title,xlabel):
     h,b = np.histogram(score, bins='auto')
@@ -239,6 +241,7 @@ preproOnly = True
 doTsmooth = True
 normalize = 'zscore'
 isCifti = False
+keepMean = False
 
 if thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
@@ -263,17 +266,17 @@ suffix = '_hp2000_clean' if isDataClean else ''
 # In[241]:
 
 Operations={
-    'MotionRegression'       : 3,
+    'MotionRegression'       : 4,
     'Scrubbing'              : 0,
-    'TissueRegression'       : 2,
-    'DetrendingWMCSF'        : 1,
-    'DetrendingGM'           : 5, 
+    'TissueRegression'       : 3,
+    'DetrendingWMCSF'        : 2,
+    'DetrendingGM'           : 6, 
     'SpatialSmoothing'       : 0,
-    'TemporalFiltering'      : 3,
+    'TemporalFiltering'      : 0,
     'ICAdenoising'           : 0,
-    'GlobalSignalRegression' : 6,
-    'VoxelNormalization'     : 0,
-    'TemporalSmoothing'      : 4,
+    'GlobalSignalRegression' : 7,
+    'VoxelNormalization'     : 1,
+    'TemporalSmoothing'      : 5,
 }
 
 Flavors={
@@ -307,7 +310,7 @@ def MotionRegression(niiImg, flavor):
             df.to_csv(path_or_buf=tmp,sep='\n',columns=[colNames[iCol]],header=None,index=False)
     X = np.empty((nTRs, 0)) 
     for iCol in range(len(colNames)):
-        X = np.concatenate((X,np.loadtxt(colNames[iCol])[:,np.newaxis]),axis=1)
+        X = np.concatenate((X,np.loadtxt(motionFile.replace('.txt','_'+colNames[iCol]+'.txt'))[:,np.newaxis]),axis=1)
     return X
 
 def Scrubbing(niiImg, flavor):
@@ -325,9 +328,9 @@ def TissueRegression(niiImg, flavor):
 
 def DetrendingWMCSF(niiImg, flavor):
     if flavor == 'legendre_3':
-        y = legendre_poly()
+        y = legendre_poly(3,nTRs)
         niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:]    
-        niiImgWMCSF = regress(niiImgWMCSF, nTRs, y, keepMean)
+        niiImgWMCSF = regress(niiImgWMCSF, nTRs, y.T, keepMean)
         niiImg[np.logical_or(maskWM_,maskCSF_),:] = niiImgWMCSF
     return niiImg 
 
@@ -337,8 +340,8 @@ def DetrendingGM(niiImg, flavor):
     else:
         niiImgGM = niiImg[maskGM_,:]
     if flavor == 'legendre_3':
-        y = legendre_poly()
-        niiImgGM = regress(niiImgFM, nTRs, y, keepMean)
+        y = legendre_poly(3,nTRs)
+        niiImgGM = regress(niiImgGM, nTRs, y.T, keepMean)
 
     if not isCifti:
         niiImg[maskGM_,:] = niiImgGM
@@ -374,8 +377,8 @@ def VoxelNormalization(niiImg, flavor):
     return niiImg  
 
 def TemporalSmoothing(niiImg, flavor):
-    w = signal.gaussian(11,sd=1)
-    niiImg = signal.lfilter(w,1,niiImg.T)
+    w = signal.gaussian(11,std=1)
+    niiImg = signal.lfilter(w,1,niiImg)
     return niiImg
 
 
@@ -427,19 +430,8 @@ print 'Step 0'
 print 'Building WM, CSF and GM masks...'
 maskAll, maskWM_, maskCSF_, maskGM_ = makeTissueMasks(subject,fmriRun,False)
 
-print 'Get info from file...'
-if isCifti:
-    cmd = 'cut -d \' \' -f 4 <<< $(wb_command -file-information {} -no-map-info|grep "Number of Columns")'.format(fmriFile)
-    nTRs = long(check_output(cmd,shell=True))
-    cmd = 'wb_command -cifti-convert -to-text {} {}'.format(fmriFile,op.join(buildpath(subject,fmriRun),'.tsv'))
-    call(cmd,shell=True)
-else:
-    img = nib.load(fmriFile)
-    hdr = img.header.structarr
-    nTRs = long(hdr['dim'][4])
-
 print 'Loading data in memory...'
-niiImg = load_img(fmriFile)
+niiImg, nRows, nCols, nSlices, nTRs, affine = load_img(fmriFile)
 
 for step in steps.items():    
     print 'Step '+str(step[0])
@@ -459,7 +451,7 @@ for step in steps.items():
                 niiImg = Hooks[opr](niiImg, Flavors[opr])
         if r.shape[1] > 0:
             niiImg = regress(niiImg, nTRs, r, normalize=='keepMean')    
-            
+    niiImg[np.isnan(niiImg)] = 0
 ## We're done! Copy the resulting file
 if isCifti:
     # write to text file
@@ -473,11 +465,11 @@ if isCifti:
     call(cmd,shell=True)
     del niiImg
 else:
-    niiimg = np.zeros((nRows, nCols, nSlices, nTRs))
+    niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
     niiimg[maskAll,:] = niiImg
     del niiImg
     niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
-    newimg = nib.Nifti1Image(niiimg, img.affine)
-    nib.save(newimg,outFile)
+    newimg = nib.Nifti1Image(niiimg, affine)
+    nib.save(newimg,'test/outfile.nii.gz')
     del niiimg            
 
