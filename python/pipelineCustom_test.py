@@ -32,6 +32,7 @@ import gzip
 def regress(niiImg, nTrs, regressors, keepMean):
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = niiImg.shape[0]
+    print 'inside regress {}'.format(N)
     for i in range(N):
         fit = np.linalg.lstsq(X, niiImg[i,:].T)[0]
         fittedvalues = np.dot(X, fit)
@@ -317,6 +318,12 @@ def Scrubbing(niiImg, flavor):
     print 'Scrubbing : '+flavor    
 
 def TissueRegression(niiImg, flavor):
+    if isCifti:
+	niiImgGM = niiImg		
+    else:
+	niiImgGM = niiImg[maskGM_,:]
+
+   
     meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
     meanWM = meanWM - np.mean(meanWM)
     meanWM = meanWM/max(meanWM)
@@ -324,7 +331,12 @@ def TissueRegression(niiImg, flavor):
     meanCSF = meanCSF - np.mean(meanCSF)
     meanCSF = meanCSF/max(meanCSF)
     X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
-    return X
+    niiImgGM = regress(niiImgGM, nTRs, X, keepMean)
+    if not isCifti:
+	niiImg[maskGM_,:] = niiImgGM
+    else:
+	niiImg = niiImgGM
+    return niiImg
 
 def DetrendingWMCSF(niiImg, flavor):
     if flavor == 'legendre_3':
@@ -434,24 +446,37 @@ print 'Loading data in memory...'
 niiImg, nRows, nCols, nSlices, nTRs, affine = load_img(fmriFile)
 
 for step in steps.items():    
-    print 'Step '+str(step[0])
+    print 'Step '+str(step[0])+' '+str(step[1])
     if len(step[1]) == 1:
         if 'Regression' in step[1][0]:
-            r0 = Hooks[step[1][0]](niiImg, Flavors[step[1][0]])
-            niiImg = regress(niiImg, nTRs, r0, normalize=='keepMean')
+	    if step[1][0]=='TissueRegression':
+	        niiImg = Hooks[step[1][0]](niiImg, Flavors[step[1][0]])
+	    else:
+    	        r0 = Hooks[step[1][0]](niiImg, Flavors[step[1][0]])
+    	        niiImg = regress(niiImg, nTRs, r0, normalize=='keepMean')
         else:
             niiImg = Hooks[step[1][0]](niiImg, Flavors[step[1][0]])
     else:
         r = np.empty((nTRs, 0))
         for opr in step[1]:
-            if 'Regression' in opr:
-                r0 = Hooks[opr](niiImg, Flavors[opr])
-                r = np.append(r, r0, axis=1)
+            if 'Regression' in opr[0]:
+		if opr[0]=='TissueRegression':
+		    niiImg = Hooks[opr](niiImg, Flavors[opr])
+		else:    
+                    r0 = Hooks[opr](niiImg, Flavors[opr])
+                    r = np.append(r, r0, axis=1)
             else:
                 niiImg = Hooks[opr](niiImg, Flavors[opr])
         if r.shape[1] > 0:
-            niiImg = regress(niiImg, nTRs, r, normalize=='keepMean')    
+       	    niiImg = regress(niiImg, nTRs, r, normalize=='keepMean')    
     niiImg[np.isnan(niiImg)] = 0
+    
+    niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
+    niiimg[maskAll,:] = niiImg
+    niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
+    newimg = nib.Nifti1Image(niiimg, affine)
+    nib.save(newimg,'test/step{}p.nii.gz'.format(step[0])) 
+    del niiimg            
 ## We're done! Copy the resulting file
 if isCifti:
     # write to text file
