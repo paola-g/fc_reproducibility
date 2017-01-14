@@ -48,8 +48,8 @@ queue = False
 useFeat = False
 preproOnly = True
 doTsmooth = True
-normalize = 'keepMean'
-isCifti = False
+normalize = 'zscore'
+isCifti = True
 if thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
 elif thisRun == 'rfMRI_REST2':
@@ -182,7 +182,7 @@ if not doTsmooth:
     mysuffix = mysuffix + '_noTsmooth'
 
 if isCifti:
-    fmriFile = op.join(buildpath(subject,fmriRun),fmriRun+suffix+'.dtseries.nii')
+    fmriFile = op.join(buildpath(subject,fmriRun),fmriRun+suffix+'_Atlas.dtseries.nii')
     outFile = op.join(buildpath(subject,fmriRun),fmriRun+suffix+mysuffix+'_FinnPrepro.dtseries.nii')
     prefix = 'GrayOrdStep'
 else:
@@ -255,16 +255,17 @@ for i in num_pol:
 
 # keep only WM/CSF voxels to speed things up
 if isCifti:
-    volFile = fmriFileOrig.replace('_Atlas.dtseries.nii','.nii.gz')
+    toUnzip = fmriFile.replace('_Atlas.dtseries.nii','.nii.gz')
 else:
-    outFilePath = op.join(buildpath(subject, fmriRun), fmriRun+'.nii')
-    
-    with gzip.open(fmriFile, 'rb') as fFile:
-	outFilePath = op.join(buildpath(subject, fmriRun), fmriRun+'.nii')
-	with open(outFilePath, 'wb') as outfile:
-	    outfile.write(fFile.read())
+    toUnzip = fmriFile
 
-    volFile = outFilePath
+with open(toUnzip, 'rb') as fFile:
+    decompressedFile = gzip.GzipFile(fileobj=fFile)
+    outFilePath = op.join(buildpath(subject, fmriRun), fmriRun+'.nii')
+    with open(outFilePath, 'wb') as outfile:
+        outfile.write(decompressedFile.read())
+
+volFile = outFilePath
     
 img = nib.load(volFile)
 data = np.memmap(volFile, dtype=img.header.get_data_dtype(), mode='c', order='F',
@@ -278,6 +279,7 @@ niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
 niiimg[maskAll,:] = niiImg
 niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
 newimg = nib.Nifti1Image(niiimg, img.affine, header=img.header)
+print niiImg.shape
 nib.save(newimg,'test/step0.nii')
 del niiimg 
 
@@ -291,6 +293,7 @@ niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
 niiimg[maskAll,:] = niiImg
 niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
 newimg = nib.Nifti1Image(niiimg, img.affine, header=img.header)
+print niiImg.shape
 nib.save(newimg,'test/step1.nii')
 del niiimg 
 
@@ -313,6 +316,7 @@ niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
 niiimg[maskAll,:] = niiImg
 niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
 newimg = nib.Nifti1Image(niiimg, img.affine, header=img.header)
+print niiImg.shape
 nib.save(newimg,'test/step2.nii')
 del niiimg 
 
@@ -352,12 +356,7 @@ else:
     niiImg = niiImgGM
 del niiImgGM  
 
-niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
-niiimg[maskAll,:] = niiImg
-niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
-newimg = nib.Nifti1Image(niiimg, img.affine, header=img.header)
-nib.save(newimg,'test/step3.nii')
-del niiimg      
+print niiImg.shape
 
 ## 3. Regress motion parameters (found in the Movement_Regressors_dt_txt
 # file from HCP)    
@@ -388,12 +387,7 @@ for i in range(N):
     else:
 	niiImg[i,:] = resid
 	
-niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
-niiimg[maskAll,:] = niiImg
-niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
-newimg = nib.Nifti1Image(niiimg, img.affine, header=img.header)
-nib.save(newimg,'test/step4.nii')
-del niiimg 
+print niiImg.shape
 
 
 ## 4. Temporal smoothing with Gaussian kernel (sigma = 1 TR)       
@@ -402,12 +396,7 @@ if doTsmooth:
     w = signal.gaussian(11,std=1)
     niiImg = signal.lfilter(w,1,niiImg)
 
-niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
-niiimg[maskAll,:] = niiImg
-niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
-newimg = nib.Nifti1Image(niiimg, img.affine, header=img.header)
-nib.save(newimg,'test/step5.nii')
-del niiimg 
+print niiImg.shape
     
 ## 5. Regress temporal drift from gray matter (3rd order polynomial)
 print ('Step 5 (detrend gray matter voxels, polynomial order 3)')
@@ -437,12 +426,7 @@ else:
     niiImg = niiImgGM
 del niiImgGM    
 
-niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
-niiimg[maskAll,:] = niiImg
-niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
-newimg = nib.Nifti1Image(niiimg, img.affine, header=img.header)
-nib.save(newimg,'test/step6.nii')
-del niiimg 
+print niiImg.shape
     
 ## 6. Regress global mean (mask includes all voxels in brain mask,
 # gray matter, white matter and CSF
@@ -464,14 +448,14 @@ for i in range(N):
 ## We're done! Copy the resulting file
 if isCifti:
     # write to text file
-    np.savetxt(op.join(buildpath(subject,fmriRun),'.tsv'),niiImg, delimiter='\t', fmt='%.6f')
+    np.savetxt(op.join(buildpath(subject,fmriRun),fmriRun+'.tsv'),niiImg, delimiter='\t', fmt='%.6f')
     # need to convert back to cifti
-    cmd = 'wb_command -cifti-convert -from-text {} {} {}'.format(op.join(buildpath(subject,fmriRun),'.tsv'),
+    cmd = 'wb_command -cifti-convert -from-text {} {} {}'.format(op.join(buildpath(subject,fmriRun),fmriRun+'.tsv'),
 								 fmriFile,outFile)
     call(cmd,shell=True)
     # delete temporary files
-    cmd = 'rm -r {}/*.tsv'.format(buildpath(subject,fmriRun))
-    call(cmd,shell=True)
+    #cmd = 'rm -r {}/*.tsv'.format(buildpath(subject,fmriRun))
+    #call(cmd,shell=True)
     del niiImg
 else:
     niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
