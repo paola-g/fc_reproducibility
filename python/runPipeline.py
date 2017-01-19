@@ -40,6 +40,12 @@ def runPipeline(subject, fmriRun, fmriFile):
             if r.shape[1] > 0:
                 niiImg = regress(niiImg, nTRs, r, keepMean)    
         niiImg[np.isnan(niiImg)] = 0
+	niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
+        niiimg[maskAll,:] = niiImg
+        niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
+        newimg = nib.Nifti1Image(niiimg, affine)
+        nib.save(newimg,'test/step{}_par.nii.gz'.format(i))
+        del niiimg
 
     print 'Done! Copy the resulting file...'
     if isCifti:

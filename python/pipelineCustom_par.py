@@ -78,7 +78,7 @@ for iSub in range(1):
             call('rm -rf '+op.join(buildpath(subject,fmriRun),fmriRun+'_FinnPrepro.dtseries.nii'),shell=True)
             
   
-    for iPEdir in range(len(PEdirs)):
+    for iPEdir in range(1):
         PEdir=PEdirs[iPEdir]
         fmriRun = thisRun+'_'+PEdir
         if parcellation=='shenetal_neuroimage2013':
@@ -114,7 +114,7 @@ for iSub in range(1):
                 cmd='chmod 774 '+thisScript
                 call(cmd,shell=True)
                 # call to fnSubmitToCluster
-                JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=15G'.format(priority))
+                JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=20G'.format(priority))
                 joblist.append(JobID)
             else:
                 runPipeline(subject, fmriRun, fmriFile)

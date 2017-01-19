@@ -352,10 +352,10 @@ Operations= [
     ['VoxelNormalization',      1, ['zscore']],
     ['Detrending',              2, ['legendre', 3, 'WMCSF']],
     ['TissueRegression',        3, ['WMCSF']],
-    ['MotionRegression',        3, ['[R dR]']],
-    ['TemporalFiltering',       4, ['Gaussian', 1]],
-    ['Detrending',              5, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  6, []],
+    ['MotionRegression',        4, ['[R dR]']],
+    ['TemporalFiltering',       5, ['Gaussian', 1]],
+    ['Detrending',              6, ['legendre', 3,'GM']],
+    ['GlobalSignalRegression',  7, []],
     ['Scrubbing',               0, ['fd', 0.2]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
     ['ICAdenoising',            0, ['ICAFIX']],
@@ -420,7 +420,7 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
     if flavor[0] == 'CompCor':
         X = extract_noise_components(niiImg, num_components=flavor[1])
         niiImgGM = regress(niiImgGM, nTRs, X, keepMean)
-    elif flavor[0] == 'WM/CSF':
+    elif flavor[0] == 'WMCSF':
         meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
         meanWM = meanWM/max(meanWM)
@@ -429,7 +429,8 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         meanCSF = meanCSF/max(meanCSF)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
         niiImgGM = regress(niiImgGM, nTRs, X, keepMean)
-    
+    else:
+	print 'Warning! Wrong tissue regression flavor. Nothing was done.' 
     if not isCifti:
         niiImg[maskGM_,:] = niiImgGM
     else:
