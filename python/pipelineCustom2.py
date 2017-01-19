@@ -42,6 +42,7 @@ from time import localtime, strftime
 # In[95]:
 
 def regress(niiImg, nTRs, regressors, keepMean):
+    print 'inside regress', niiImg.shape
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = niiImg.shape[0]
     for i in range(N):
@@ -344,10 +345,10 @@ Operations= [
     ['VoxelNormalization',      1, ['zscore']],
     ['Detrending',              2, ['legendre', 3, 'WMCSF']],
     ['TissueRegression',        3, ['WMCSF']],
-    ['MotionRegression',        3, ['[R dR]']],
-    ['TemporalFiltering',       4, ['Gaussian', 1]],
-    ['Detrending',              5, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  6, []],
+    ['MotionRegression',        4, ['[R dR]']],
+    ['TemporalFiltering',       5, ['Gaussian', 1]],
+    ['Detrending',              6, ['legendre', 3,'GM']],
+    ['GlobalSignalRegression',  7, []],
     ['Scrubbing',               0, ['fd', 0.2]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
     ['ICAdenoising',            0, ['ICAFIX']],
@@ -412,6 +413,8 @@ def TissueRegression(niiImg, flavor):
         meanCSF = meanCSF/max(meanCSF)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
         niiImgGM = regress(niiImgGM, nTRs, X, keepMean)
+    else:
+        print 'Warning! Wrong flavor. Nothing was done'    
     
     if not isCifti:
         niiImg[maskGM_,:] = niiImgGM
