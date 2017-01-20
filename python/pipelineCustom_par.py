@@ -68,14 +68,6 @@ for iSub in range(1):
             excludeSub.append(iSub)
             continue
     
-    if overwrite == 2:
-        call('rm -rf '+op.join(buildpath(subject,fmriRun),'Step1*'),shell=True)
-        if not isCifti:
-            call('rm -rf '+op.join(buildpath(subject,fmriRun),'Volume*'),shell=True)
-            call('rm -rf '+op.join(buildpath(subject,fmriRun),fmriRun+'_FinnPrepro.nii.gz'),shell=True)
-        else:
-            call('rm -rf '+op.join(buildpath(subject,fmriRun),'GrayOrd*'),shell=True)
-            call('rm -rf '+op.join(buildpath(subject,fmriRun),fmriRun+'_FinnPrepro.dtseries.nii'),shell=True)
             
   
     for iPEdir in range(1):
@@ -103,6 +95,8 @@ for iSub in range(1):
                 if not op.isdir(jobDir): mkdir(jobDir)
                 thispythonfn = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
                 thispythonfn += 'from runPipeline import *\n'
+                thispythonfn += 'subject = "{}"\n'.format(subject)
+                thispythonfn += 'fmriRun = "{}"\n'.format(fmriRun)
 		thispythonfn += 'runPipeline("{}","{}","{}")\nEND'.format(subject,fmriRun,fmriFile)
                 jobName = 's{}_{}_{}_pipeline'.format(subjects[iSub],thisRun,PEdir)
                 # prepare a script

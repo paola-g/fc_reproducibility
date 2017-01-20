@@ -70,4 +70,4 @@ def runPipeline(subject, fmriRun, fmriFile):
 
     timeEnd = localtime()  
 
-    conf2XML(fmriFile, DATADIR, sortedOperations, timeStart, timeEnd, buildpath(subject,fmriRun)+outXML)
+    conf2XML(fmriFile, DATADIR, sortedOperations, timeStart, timeEnd, op.join(buildpath(subject,fmriRun),outXML))
