@@ -403,10 +403,26 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
     return X
 
 def Scrubbing(niiImg, flavor, masks, imgInfo):
-    maskAll, maskWM_, maskCSF_, maskGM_ = masks
-    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
-
-    print 'Scrubbing : '+flavor    
+    thr = flavors[1]
+    if flavor[0] == 'DVARS':
+        # pcSigCh
+        niiImg = 100 * niiImg / np.mean(niiImg,axis=1)[:,np.newaxis] -100
+        dt = np.diff(niiImg, n=1, axis=1)
+        dt = np.concatenate((np.zeros((dt.shape[0],1)), dt), axis=1)
+        score = np.sqrt(np.mean(dt**2,0))        
+    elif flavor[0] == 'FD':
+        motionFile = op.join(buildpath(subject,fmriRun), 'Movement_Regressors_dt.txt')
+        motpars = np.genfromtxt(motionFile)[:,6:] #derivatives
+        headradius=50 #50mm as in Powers et al.
+        disp=dmotpars.copy()
+        disp[:,3:]=np.pi*headradius*2*(disp[:,3:]/360)
+        score=np.sum(disp,1)
+    else:
+        print 'Wrong scrubbing flavor. Nothing was done'
+    censored = np.where(score>thr)
+    np.savetxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoint.txt'), delimiter='\n')
+    np.savetxt(op.join(buildpath(subject,fmriRun), 'Censored_Regressors.txt'), delimiter='\t')           
+    return niiImg
 
 def TissueRegression(niiImg, flavor, masks, imgInfo):
     maskAll, maskWM_, maskCSF_, maskGM_ = masks
