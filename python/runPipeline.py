@@ -50,10 +50,10 @@ def runPipeline(subject, fmriRun, fmriFile):
     print 'Done! Copy the resulting file...'
     if isCifti:
         # write to text file
-        np.savetxt(outFile+'.tsv',niiImg, delimiter='\t', fmt='%.6f')
+        np.savetxt(op.join(buildpath(subject,fmriRun),outfile+'.tsv'),niiImg, delimiter='\t', fmt='%.6f')
         # need to convert back to cifti
         cmd = 'wb_command -cifti-convert -from-text {} {} {}'.format(op.join(buildpath(subject,fmriRun),'.tsv'),
-                                                                     fmriFile,outFile)
+                                                                     fmriFile,op.join(buildpath(subject,fmriRun),outFile+'.dtseries.nii'))
         call(cmd,shell=True)
         # delete temporary files
         cmd = 'rm -r {}/*.tsv'.format(buildpath(subject,fmriRun))
@@ -65,7 +65,7 @@ def runPipeline(subject, fmriRun, fmriFile):
         del niiImg
         niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
         newimg = nib.Nifti1Image(niiimg, affine)
-        nib.save(newimg,outFile+'.nii.gz')
+        nib.save(newimg,op.join(buildpath(subject,fmriRun),outFile+'.nii.gz'))
         del niiimg 
 
     timeEnd = localtime()  

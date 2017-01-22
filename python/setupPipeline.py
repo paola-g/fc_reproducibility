@@ -63,7 +63,7 @@ def legendre_poly(order, nTRs):
     x = x - x.max()/2
     num_pol = range(order+1)
     y = np.ones((len(num_pol),len(x)))   
-    coeff = np.eye(len(num_pol))
+    coeff = np.eye(order+1)
     # Print out text file for each polynomial to be used as a regressor
     for i in num_pol:
         myleg = Legendre(coeff[i])
@@ -207,6 +207,9 @@ def makeTissueMasks(subject,fmriRun,overwrite):
     maskCSF_ = maskCSF[maskAll]
     maskGM_ = maskGM[maskAll]
 
+    # delete temporary files
+    cmd = 'rm eye.mat ribbon_flirt.mat wmparc_flirt.mat'
+    call(cmd,shell=True)
 
     return maskAll, maskWM_, maskCSF_, maskGM_
 
@@ -299,8 +302,6 @@ def fnSubmitToCluster(strScript, strJobFolder, strJobUID, resources):
 behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
 release = 'Q2'
 outScore = 'PMAT24_A_CR'
-DATADIR = '/media/paola/HCP/'
-PARCELDIR = '/home/paola/parcellations'
 parcellation = 'shenetal_neuroimage2013'
 overwrite = False
 thisRun = 'rfMRI_REST1'
@@ -311,6 +312,28 @@ normalize = 'zscore'
 isCifti = False
 keepMean = False
 queue = True
+
+# customize path to get access to single runs
+def buildpath(subject,fmriRun):
+    return 'test'
+# these functions allow Paola & Julien to run code locally with their own path definitions
+def getDataDir(x):
+    return {
+        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/HCP/MRI',
+        'sculpin.caltech.edu': '/data/jdubois/data/HCP/MRI',
+    }.get(x, '/media/paola/HCP/')    # /media/paola/HCP is default if x not found
+def getParcelDir(x):
+    return {
+        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
+        'sculpin.caltech.edu': '/data/jdubois/data/parcellations/',
+    }.get(x, '/home/paola/parcellations/')    # /home/paola/parcellations/ is default if x not found
+import socket
+HOST=socket.gethostname()
+DATADIR=getDataDir(HOST)
+PARCELDIR=getParcelDir(HOST)
+
+#DATADIR = '/media/paola/HCP/'
+#PARCELDIR = '/home/paola/parcellations'
 
 if queue: priority=-100
 
@@ -323,16 +346,13 @@ else:
     
 suffix = '_hp2000_clean' if isDataClean else ''   
 
-# customize path to get access to single runs
-def buildpath(subject,fmriRun):
-    return 'test'
 
 
 # In[101]:
 
-fmriFile = 'test/rfMRI_REST1_LR.nii.gz'
 subject = '734045'
 fmriRun = 'rfMRI_REST1_LR'
+fmriFile = op.join(buildpath(subject,fmriRun),'rfMRI_REST1_LR.nii.gz')
 rstring = ''.join(random.SystemRandom().choice(string.ascii_lowercase +string.ascii_uppercase + string.digits) for _ in range(8))
 outFile = fmriRun+'_'+rstring
 outXML = rstring+'.xml'
@@ -369,6 +389,7 @@ Operations= [
 # In[71]:
 
 def MotionRegression(niiImg, flavor, masks, imgInfo):
+    # assumes that data is organized as in the HCP
     maskAll, maskWM_, maskCSF_, maskGM_ = masks
     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
 
@@ -458,11 +479,10 @@ def Detrending(niiImg, flavor, masks, imgInfo):
     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
 
     if flavor[2] == 'WMCSF':
+        niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:]    
         if flavor[0] == 'legendre':
             y = legendre_poly(flavor[1],nTRs)
-            niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:]    
             niiImgWMCSF = regress(niiImgWMCSF, nTRs, y.T, keepMean)
-            niiImg[np.logical_or(maskWM_,maskCSF_),:] = niiImgWMCSF
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
             nPoly = flavor[0] + 1
@@ -471,11 +491,10 @@ def Detrending(niiImg, flavor, masks, imgInfo):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
                 y[i,:] = y[i,:] - np.mean(y[i,:])
                 y[i,:] = y[i,:]/np.max(y[i,:]) 
-            niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:]    
             niiImgWMCSF = regress(niiImgWMCSF, nTRs, y.T, keepMean)
-            niiImg[np.logical_or(maskWM_,maskCSF_),:] = niiImgWMCSF
         else:
             print 'Warning! Wrong detrend flavor. Nothing was done'    
+        niiImg[np.logical_or(maskWM_,maskCSF_),:] = niiImgWMCSF
     elif flavor[2] == 'GM':
         if isCifti:
             niiImgGM = niiImg
