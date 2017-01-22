@@ -70,4 +70,7 @@ def runPipeline(subject, fmriRun, fmriFile):
 
     timeEnd = localtime()  
 
+    rstring = ''.join(random.SystemRandom().choice(string.ascii_lowercase +string.ascii_uppercase + string.digits) for _ in range(8))
+    outFile = fmriRun+'_'+rstring
+    outXML = rstring+'.xml'
     conf2XML(fmriFile, DATADIR, sortedOperations, timeStart, timeEnd, op.join(buildpath(subject,fmriRun),outXML))

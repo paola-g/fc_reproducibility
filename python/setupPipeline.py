@@ -353,9 +353,6 @@ suffix = '_hp2000_clean' if isDataClean else ''
 subject = '734045'
 fmriRun = 'rfMRI_REST1_LR'
 fmriFile = op.join(buildpath(subject,fmriRun),'rfMRI_REST1_LR.nii.gz')
-rstring = ''.join(random.SystemRandom().choice(string.ascii_lowercase +string.ascii_uppercase + string.digits) for _ in range(8))
-outFile = fmriRun+'_'+rstring
-outXML = rstring+'.xml'
 
 
 # ### Pipeline definition
