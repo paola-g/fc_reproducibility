@@ -4,6 +4,18 @@ def runPipeline(subject, fmriRun, fmriFile):
     
     timeStart = localtime()
     
+    if parcellation=='shenetal_neuroimage2013':
+        uniqueParcels = range(268)
+        isCifti = 0
+        parcelVolume = 'fconn_atlas_150_2mm.nii'
+    elif parcellation=='Glasser_Aseg_Suit':
+        isCifti = 1
+        parcelVolume = 'Parcels.dlabel.nii'
+        uniqueParcels = range(405)
+    else:
+        print "Invalid parcellation code"
+        return
+
     print 'Step 0'
     print 'Building WM, CSF and GM masks...'
     masks = makeTissueMasks(subject,fmriRun,False)
@@ -40,14 +52,10 @@ def runPipeline(subject, fmriRun, fmriFile):
             if r.shape[1] > 0:
                 niiImg = regress(niiImg, nTRs, r, keepMean)    
         niiImg[np.isnan(niiImg)] = 0
-	niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
-        niiimg[maskAll,:] = niiImg
-        niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
-        newimg = nib.Nifti1Image(niiimg, affine)
-        nib.save(newimg,'test/step{}_par.nii.gz'.format(i))
-        del niiimg
 
     print 'Done! Copy the resulting file...'
+    rstring = ''.join(random.SystemRandom().choice(string.ascii_lowercase +string.ascii_uppercase + string.digits) for _ in range(8))
+    outFile = fmriRun+'_'+rstring
     if isCifti:
         # write to text file
         np.savetxt(op.join(buildpath(subject,fmriRun),outfile+'.tsv'),niiImg, delimiter='\t', fmt='%.6f')
@@ -70,7 +78,58 @@ def runPipeline(subject, fmriRun, fmriFile):
 
     timeEnd = localtime()  
 
-    rstring = ''.join(random.SystemRandom().choice(string.ascii_lowercase +string.ascii_uppercase + string.digits) for _ in range(8))
-    outFile = fmriRun+'_'+rstring
     outXML = rstring+'.xml'
     conf2XML(fmriFile, DATADIR, sortedOperations, timeStart, timeEnd, op.join(buildpath(subject,fmriRun),outXML))
+    print 'Preprocessing complete. Starting FC computation...'
+    # After preprocessing, functional connectivity is computed
+    ResultsDir = op.join(DATADIR,'Results')
+    if not op.isdir(ResultsDir): mkdir(ResultsDir)
+    ResultsDir = op.join(ResultsDir,pipelineName)
+    if not op.isdir(ResultsDir): mkdir(ResultsDir)
+    ResultsDir = op.join(ResultsDir,parcellation)
+    if not op.isdir(ResultsDir): mkdir(ResultsDir)
+    
+    for iParcel in uniqueParcels:
+        if not isCifti:
+            parcelMaskFile = op.join(PARCELDIR,parcellation,'parcel{:03d}.nii.gz'.format(iParcel+1))
+            if not op.isfile(parcelMaskFile):
+                print 'Making a binary volume mask for each parcel'
+                mymaths1 = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, parcellation,'fconn_atlas_150_2mm.nii'),\
+                    out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel-0.1, iParcel+0.1)) 
+                mymaths1.run()
+    if not op.isfile(fmriFile):
+        print fmriFile, 'does not exist'
+        return
+    
+    tsDir = op.join(buildpath(subject,fmriRun),parcellation)
+    if not op.isdir(tsDir): mkdir(tsDir)
+    alltsFile = op.join(ResultsDir,subject+'_'+fmriRun+'.txt')
+    print tsDir, alltsFile
+    print(alltsFile) 
+    if not (op.isfile(alltsFile)) or overwrite:            
+        # calculate signal in each of the nodes by averaging across all voxels/grayordinates in node
+        print 'Extracting mean data from',str(len(uniqueParcels)),'parcels for ',outFile
+       
+        for iParcel in uniqueParcels:
+            tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel+1))
+            if not op.isfile(tsFile):
+                if not isCifti:
+                    parcelMaskFile = op.join(PARCELDIR,parcellation,'parcel{:03d}.nii.gz'.format(iParcel+1))
+                    
+                    # simply average the voxels within the mask
+                    meants1 = fsl.ImageMeants(in_file=op.join(buildpath(subject,fmriRun), outFile+'.nii.gz'), out_file=tsFile, mask=parcelMaskFile)
+                    meants1.run()
+                else:
+                    # extract data in the parcel
+                    parcelMaskFile = op.join(PARCELDIR,parcellation,'parcel{:03d}.dscalar.nii'.format(iParcel+1))
+                    cmd = 'wb_command -cifti-label-to-roi {} {} -key {}'.format(
+                        op.joinpath(PARCELDIR,parcellation,parcelVolume), parcelMaskFile,iParcel+1)
+                    call(cmd,shell=True)
+                    cmd = 'wb_command -cifti-roi-average {} {} -cifti-roi {}'.format(
+                        op.join(buildpath(subject,fmriRun), outFile+'.nii.gz'),tsFile, parcelMaskFile)
+                
+                
+        # concatenate all ts
+        print 'Concatenating data'
+        cmd = 'paste '+op.join(tsDir,'parcel*.txt')+' > '+alltsFile
+        call(cmd, shell=True)

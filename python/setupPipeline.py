@@ -8,7 +8,7 @@ import os.path as op
 from os import mkdir, makedirs, getcwd, remove
 import scipy.stats as stats
 import nipype.interfaces.fsl as fsl
-from subprocess import call, Popen, check_output
+from subprocess import call, Popen, check_output, CalledProcessError
 import nibabel as nib
 from shutil import copyfile, rmtree
 import pandas as pd
@@ -27,7 +27,7 @@ import scipy.linalg as linalg
 import string
 import random
 import xml.etree.cElementTree as ET
-from time import localtime, strftime
+from time import localtime, strftime, sleep
 
 
 # ### Utils
@@ -181,6 +181,10 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         GMmask = np.reshape(GMmask,ref.shape)
         img = nib.Nifti1Image(GMmask, ref.affine)
         nib.save(img, GMmaskFileout)
+
+        # delete temporary files
+        cmd = 'rm eye.mat ribbon_flirt.mat wmparc_flirt.mat'
+        call(cmd,shell=True)
         
         
     tmpnii = nib.load(WMmaskFileout)
@@ -207,9 +211,6 @@ def makeTissueMasks(subject,fmriRun,overwrite):
     maskCSF_ = maskCSF[maskAll]
     maskGM_ = maskGM[maskAll]
 
-    # delete temporary files
-    cmd = 'rm eye.mat ribbon_flirt.mat wmparc_flirt.mat'
-    call(cmd,shell=True)
 
     return maskAll, maskWM_, maskCSF_, maskGM_
 
@@ -291,14 +292,14 @@ def fnSubmitToCluster(strScript, strJobFolder, strJobUID, resources):
     with open(op.join(strJobFolder,strJobUID+'.cmd'),'w+') as hFileID:
         hFileID.write(strCommand+'\n')
     # execute the command
-    p = Popen(shlex.split(strCommand))
-    return p.pid    
+    cmdOut = check_output(strCommand, shell=True)
+    return cmdOut.split()[2]    
 
-
+    
 # ### Parameters
 
 # In[84]:
-
+pipelineName = 'Finn'
 behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
 release = 'Q2'
 outScore = 'PMAT24_A_CR'
@@ -306,7 +307,7 @@ parcellation = 'shenetal_neuroimage2013'
 overwrite = False
 thisRun = 'rfMRI_REST1'
 isDataClean = False
-doPlot = True
+doPlot = False
 queue = False
 normalize = 'zscore'
 isCifti = False
@@ -321,12 +322,12 @@ def getDataDir(x):
     return {
         'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/HCP/MRI',
         'sculpin.caltech.edu': '/data/jdubois/data/HCP/MRI',
-    }.get(x, '/media/paola/HCP/')    # /media/paola/HCP is default if x not found
+    }.get(x, 'test')    # /media/paola/HCP is default if x not found
 def getParcelDir(x):
     return {
         'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
         'sculpin.caltech.edu': '/data/jdubois/data/parcellations/',
-    }.get(x, '/home/paola/parcellations/')    # /home/paola/parcellations/ is default if x not found
+    }.get(x, '/data/pgaldi/parcellations/')    # /home/paola/parcellations/ is default if x not found
 import socket
 HOST=socket.gethostname()
 DATADIR=getDataDir(HOST)

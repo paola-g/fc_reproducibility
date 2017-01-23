@@ -40,9 +40,9 @@ score = df[outScore]
 
 # In[ ]:
 
-ResultsDir = 'test'
+ResultsDir = 'test/Results'
 if not op.isdir(ResultsDir): mkdir(ResultsDir)
-ResultsDir = op.join(ResultsDir, 'Finn')
+ResultsDir = op.join(ResultsDir, pipelineName)
 if not op.isdir(ResultsDir): mkdir(ResultsDir)
 ResultsDir = op.join(ResultsDir, parcellation)
 if not op.isdir(ResultsDir): mkdir(ResultsDir)
@@ -51,7 +51,7 @@ PEdirs = ['LR', 'RL']
 RelRMSMean = np.zeros([len(subjects), 2])
 excludeSub = list()
 joblist = []
-for iSub in range(1):
+for iSub in range(len(subjects)):
     subject = str(subjects[iSub])
     RelRMSMeanFile = op.join(buildpath(subject, thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
     fLR = RelRMSMeanFile.replace('zz','LR');
@@ -70,7 +70,7 @@ for iSub in range(1):
     
             
   
-    for iPEdir in range(1):
+    for iPEdir in range(len(PEdirs)):
         PEdir=PEdirs[iPEdir]
         fmriRun = thisRun+'_'+PEdir
         if parcellation=='shenetal_neuroimage2013':
@@ -88,7 +88,6 @@ for iSub in range(1):
             continue
         
         if not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'.txt'))) or overwrite:
-            print 'load and preprocess'
             if queue:
                 # make a script to load and preprocess that file, then save as .mat
                 jobDir = op.join(buildpath(str(subjects[iSub]),thisRun+'_'+PEdir),'jobs')
@@ -98,7 +97,7 @@ for iSub in range(1):
                 thispythonfn += 'subject = "{}"\n'.format(subject)
                 thispythonfn += 'fmriRun = "{}"\n'.format(fmriRun)
 		thispythonfn += 'runPipeline("{}","{}","{}")\nEND'.format(subject,fmriRun,fmriFile)
-                jobName = 's{}_{}_{}_pipeline'.format(subjects[iSub],thisRun,PEdir)
+                jobName = 's{}_{}_{}_{}'.format(subjects[iSub],thisRun,PEdir, pipelineName)
                 # prepare a script
                 thisScript=op.join(jobDir,jobName+'.sh')
                 with open(thisScript,'w') as fidw:
@@ -117,3 +116,54 @@ for iSub in range(1):
 
 indkeep = np.setdiff1d(range(len(subjects)),excludeSub, assume_unique=True)
 
+if queue:
+    if len(joblist) != 0:
+        print 'Waiting for jobs...'
+        while True:
+            nleft = len(joblist)
+            for i in range(nleft):
+                myCmd = "qstat | grep ' {} '".format(joblist[i])
+                isEmpty = False
+                try:
+                    cmdOut = check_output(myCmd, shell=True)
+                except CalledProcessError as e:
+                    isEmpty = True
+                finally:
+                    if isEmpty:
+                        nleft = nleft-1
+            if nleft == 0:
+                break
+            sleep(10) 
+		
+rho1,p1 = stats.pearsonr(score[indkeep],np.mean(RelRMSMean[indkeep,:],axis=1))
+rho2,p2 = stats.pearsonr(score,np.mean(RelRMSMean,axis=1))                         
+print 'With all subjects: corr(IQ,motion) = {:.3f} (p = {:.3f})'.format(rho2,p2)
+print 'After discarding high movers: corr(IQ,motion) = {:.3f} (p = {:.3f})'.format(rho1,p1)
+
+print 'Computing correlation matrices...'
+if parcellation=='shenetal_neuroimage2013':
+    nParcels = 268
+elif parcellation=='Glasser_Aseg_Suit':
+    nParcels = 405
+corrmats = np.zeros([nParcels,nParcels,len(indkeep)])
+scores = np.zeros([len(indkeep)])
+index = 0
+for iSub in range(len(subjects)):
+    if iSub not in excludeSub:
+        PEdir=PEdirs[iPEdir] 
+        tsFile_LR=op.join(ResultsDir,str(subjects[iSub])+'_'+thisRun+'_LR.txt')
+        tsFile_RL=op.join(ResultsDir,str(subjects[iSub])+'_'+thisRun+'_RL.txt')
+        ts_LR = np.loadtxt(tsFile_LR)
+        ts_RL = np.loadtxt(tsFile_RL)
+        # Fisher z transform of correlation coefficients
+        corrMat_LR = np.arctanh(np.corrcoef(ts_LR,rowvar=0))
+        corrMat_RL = np.arctanh(np.corrcoef(ts_RL,rowvar=0))
+        np.fill_diagonal(corrMat_LR,1)
+        np.fill_diagonal(corrMat_RL,1)
+        corrmats[:,:,index] = (corrMat_LR + corrMat_RL)/2
+        scores[index] = score[iSub]
+        
+results = {}
+results[outMat] = corrmats
+results[outScore] = scores
+sio.savemat(op.join(ResultsDir,'{}_HCP_{}.mat'.format(thisRun,release)),results)
