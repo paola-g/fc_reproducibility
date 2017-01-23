@@ -112,7 +112,7 @@ for iSub in range(len(subjects)):
             else:
                 runPipeline(subject, fmriRun, fmriFile)
         else:
-            print subject[iSub], ' : ', PEdir, 'results already computed; skipping'
+            print subjects[iSub], ' : ', PEdir, 'results already computed; skipping'
 
 indkeep = np.setdiff1d(range(len(subjects)),excludeSub, assume_unique=True)
 
