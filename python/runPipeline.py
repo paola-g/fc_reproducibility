@@ -1,5 +1,5 @@
 from setupPipeline import *
-
+from nilearn.input_data import NiftiLabelsMasker
 def runPipeline(subject, fmriRun, fmriFile):
     
     timeStart = localtime()
@@ -95,7 +95,7 @@ def runPipeline(subject, fmriRun, fmriFile):
             if not op.isfile(parcelMaskFile):
                 print 'Making a binary volume mask for each parcel'
                 mymaths1 = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, parcellation,'fconn_atlas_150_2mm.nii'),\
-                    out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel-0.1, iParcel+0.1)) 
+                    out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel+1-0.1, iParcel+1+0.1)) 
                 mymaths1.run()
     if not op.isfile(fmriFile):
         print fmriFile, 'does not exist'
@@ -105,11 +105,13 @@ def runPipeline(subject, fmriRun, fmriFile):
     if not op.isdir(tsDir): mkdir(tsDir)
     alltsFile = op.join(ResultsDir,subject+'_'+fmriRun+'.txt')
     print tsDir, alltsFile
-    print(alltsFile) 
+    #masker = NiftiLabelsMasker(labels_img=op.join(PARCELDIR, parcellation,'fconn_atlas_150_2mm.nii'))
+    #time_series = masker.fit_transform(op.join(buildpath(subject,fmriRun), outFile+'.nii.gz'))
+    #print time_series.shape
+    #np.savetxt('mytimeseries.txt', time_series)
     if not (op.isfile(alltsFile)) or overwrite:            
         # calculate signal in each of the nodes by averaging across all voxels/grayordinates in node
         print 'Extracting mean data from',str(len(uniqueParcels)),'parcels for ',outFile
-       
         for iParcel in uniqueParcels:
             tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel+1))
             if not op.isfile(tsFile):
@@ -129,7 +131,7 @@ def runPipeline(subject, fmriRun, fmriFile):
                         op.join(buildpath(subject,fmriRun), outFile+'.nii.gz'),tsFile, parcelMaskFile)
                 
                 
-        # concatenate all ts
-        print 'Concatenating data'
-        cmd = 'paste '+op.join(tsDir,'parcel*.txt')+' > '+alltsFile
-        call(cmd, shell=True)
+    # concatenate all ts
+    print 'Concatenating data'
+    cmd = 'paste '+op.join(tsDir,'parcel*.txt')+' > '+alltsFile
+    call(cmd, shell=True)
