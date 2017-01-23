@@ -11,7 +11,6 @@ import nipype.interfaces.fsl as fsl
 from subprocess import call, Popen, check_output, CalledProcessError
 import nibabel as nib
 from shutil import copyfile, rmtree
-import pandas as pd
 import scipy.io as sio
 from sklearn import cross_validation
 from sklearn import linear_model
@@ -28,13 +27,29 @@ import string
 import random
 import xml.etree.cElementTree as ET
 from time import localtime, strftime, sleep
-
+from scipy.fftpack import fft, dct
 
 # ### Utils
 
 # In[95]:
 
-def regress(niiImg, nTRs, regressors, keepMean):
+# regressors: to filter, no. time points x no. regressors
+def filter_regressors(regressors, filtering, nTRs, TR):
+    if len(filtering==0):
+        print 'Error! Missing or wrong filtering flavor. Regressors were not filtered.'
+    else:
+        if filtering[0] == 'Butter':
+            regressors = clean(regressors, detrend=False, standardize=False, 
+                                  t_r=TR, high_pass=filtering[1], low_pass=filtering[2]).T
+        elif filtering[0] == 'Gaussian':
+            w = signal.gaussian(11,std=filtering[1])
+            regressors = signal.lfilter(w,1,regressors, axis=0)  
+    return regressors
+    
+def regress(niiImg, nTRs, TR, regressors, keepMean):
+    # if filtering has already been performed, regressors need to be filtered too
+    if len(filtering)>0:
+        regressors = filter_regressors(regressors, filtering, nTRs, TR)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = niiImg.shape[0]
     for i in range(N):
@@ -45,7 +60,7 @@ def regress(niiImg, nTRs, regressors, keepMean):
             niiImg[i,:] = X[:,0]*fit[0] + resid
         else:
             niiImg[i,:] = resid
-    return niiImg     
+    return niiImg 
 
 def normalize(niiImg,flavor):
     if flavor == 'zscore':
@@ -72,7 +87,7 @@ def legendre_poly(order, nTRs):
             y[i,:] = y[i,:] - np.mean(y[i,:])
             y[i,:] = y[i,:]/np.max(y[i,:])
         np.savetxt(op.join(buildpath(subject,fmriRun),
-                           'poly_detrend_legendre' + str(i) + '.txt'), y[i,:] ,fmt='%.2f')
+                           'poly_detrend_legendre' + str(i) + '.txt'), y[i,:] ,fmt='%.4f')
     return y
 
 def load_img(fmriFile, maskAll):
@@ -295,6 +310,47 @@ def fnSubmitToCluster(strScript, strJobFolder, strJobUID, resources):
     cmdOut = check_output(strCommand, shell=True)
     return cmdOut.split()[2]    
 
+def _interpolate(a, b, fraction):
+    """Returns the point at the given fraction between a and b, where
+    'fraction' must be between 0 and 1.
+    """
+    return a + (b - a)*fraction;
+
+def scoreatpercentile(a, per, limit=(), interpolation_method='fraction'):
+    """
+    This function is grabbed from scipy
+
+    """
+    values = np.sort(a, axis=0)
+    if limit:
+        values = values[(limit[0] <= values) & (values <= limit[1])]
+
+    idx = per /100. * (values.shape[0] - 1)
+    if (idx % 1 == 0):
+        score = values[idx]
+    else:
+        if interpolation_method == 'fraction':
+            score = _interpolate(values[int(idx)], values[int(idx) + 1],
+                                 idx % 1)
+        elif interpolation_method == 'lower':
+            score = values[np.floor(idx)]
+        elif interpolation_method == 'higher':
+            score = values[np.ceil(idx)]
+        else:
+            raise ValueError("interpolation_method can only be 'fraction', " \
+                             "'lower' or 'higher'")
+
+    return score
+
+def dctmtx(N):
+    K=N
+    n = range(N)
+    C = np.zeros((len(n), K))
+    C[:,0] = np.ones((len(n)))/np.sqrt(N)
+    doublen = [2*x+1 for x in n]
+    for k in range(1,K):
+        C[:,k] = np.sqrt(2/N)*np.cos([np.pi*x*(k-1)/(2*N) for x in doublen])        
+    return C 
     
 # ### Parameters
 
@@ -313,6 +369,8 @@ normalize = 'zscore'
 isCifti = False
 keepMean = False
 queue = True
+filtering = []
+doScrubbing = False
 
 # customize path to get access to single runs
 def buildpath(subject,fmriRun):
@@ -418,11 +476,16 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
     else:
         'Wrong flavor, using default regressors: R dR'
         X = data   
-    
+    if doScrubbing:
+        toCensor = np.loadtxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
+        toReg = np.zeros((nTRs, 1))
+        toReg[toCensor] = 1
+        return np.concatenate((X, toReg), axis=1)
     return X
+    
 
 def Scrubbing(niiImg, flavor, masks, imgInfo):
-    thr = flavors[1]
+    thr = flavor[1]
     if flavor[0] == 'DVARS':
         # pcSigCh
         niiImg = 100 * niiImg / np.mean(niiImg,axis=1)[:,np.newaxis] -100
@@ -431,16 +494,18 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         score = np.sqrt(np.mean(dt**2,0))        
     elif flavor[0] == 'FD':
         motionFile = op.join(buildpath(subject,fmriRun), 'Movement_Regressors_dt.txt')
-        motpars = np.genfromtxt(motionFile)[:,6:] #derivatives
+        dmotpars = np.abs(np.genfromtxt(motionFile)[:,6:]) #derivatives
         headradius=50 #50mm as in Powers et al.
         disp=dmotpars.copy()
         disp[:,3:]=np.pi*headradius*2*(disp[:,3:]/360)
         score=np.sum(disp,1)
     else:
         print 'Wrong scrubbing flavor. Nothing was done'
+	return niiImg
     censored = np.where(score>thr)
-    np.savetxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoint.txt'), delimiter='\n')
-    np.savetxt(op.join(buildpath(subject,fmriRun), 'Censored_Regressors.txt'), delimiter='\t')           
+    np.savetxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), censored, delimiter='\n', fmt='%d')
+    global doScrubbing
+    doScrubbing = True
     return niiImg
 
 def TissueRegression(niiImg, flavor, masks, imgInfo):
@@ -554,9 +619,20 @@ def TemporalFiltering(niiImg, flavor, masks, imgInfo):
     elif flavor[0] == 'Gaussian':
         w = signal.gaussian(11,std=1)
         niiImg = signal.lfilter(w,1,niiImg)
+    elif flavor[0] == 'DCT':
+        K = dctmtx(nTRs)
+        HPC = 1/flavor[1]
+        LPC = 1/flavor[2]
+        nHP = np.fix(2*(nTRs*TR)/HPC + 1)
+        nLP = np.fix(2*(nTRs*TR)/LPC + 1)
+        K = K[:,np.concatenate((range(1,nHP),range(int(nLP)-1,nTRs)))]
+        return K
     else:
         print 'Warning! Wrong temporal filtering flavor. Nothing was done'    
-    return niiImg    
+        return niiImg
+    global filtering
+    filtering = flavor
+    return niiImg
     
 def ICAdenoising(niiImg, flavor, masks, imgInfo):
     maskAll, maskWM_, maskCSF_, maskGM_ = masks

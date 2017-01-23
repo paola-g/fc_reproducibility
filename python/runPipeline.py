@@ -28,21 +28,25 @@ def runPipeline(subject, fmriRun, fmriFile):
     for i in range(1,nsteps+1):
         step = steps[i]
         print 'Step '+str(i)+' '+str(step[0])
+        
         if len(step) == 1:
-            if 'Regression' in step[0]:
-                if step[0]=='TissueRegression':
+            # Atomic operations
+            if 'Regression' in step[0] or ('TemporalFiltering' in step[0] and 'DCT' in Flavors[i][0]):
+                if step[0]=='TissueRegression': #regression constrained to GM
                     niiImg = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
                 else:
                     r0 = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
-                    niiImg = regress(niiImg, nTRs, r0, keepMean)
+                    niiImg = regress(niiImg, nTRs, TR, r0, keepMean)
             else:
                 niiImg = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
         else:
+            # When multiple regression steps have the same order, all the regressors are combined
+            # and a single regression is performed (other operations are executed in order)
             r = np.empty((nTRs, 0))
             for j in range(len(step)):
                 opr = step[j]
-                if 'Regression' in opr:
-                    if opr=='TissueRegression':
+                if 'Regression' in opr or ('TemporalFiltering' in opr and 'DCT' in Flavors[i][j]):
+                    if opr=='TissueRegression': #regression constrained to GM
                         niiImg = Hooks[opr](niiImg, Flavors[i][j], masks, imgInfo[1:])
                     else:    
                         r0 = Hooks[opr](niiImg, Flavors[i][j], masks, imgInfo[1:])
@@ -50,7 +54,7 @@ def runPipeline(subject, fmriRun, fmriFile):
                 else:
                     niiImg = Hooks[opr](niiImg, Flavors[i][j], masks, imgInfo[1:])
             if r.shape[1] > 0:
-                niiImg = regress(niiImg, nTRs, r, keepMean)    
+                niiImg = regress(niiImg, nTRs, TR, r, keepMean)    
         niiImg[np.isnan(niiImg)] = 0
 
     print 'Done! Copy the resulting file...'
