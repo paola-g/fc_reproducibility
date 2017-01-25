@@ -48,8 +48,8 @@ def filter_regressors(regressors, filtering, nTRs, TR):
     
 def regress(niiImg, nTRs, TR, regressors, keepMean):
     # if filtering has already been performed, regressors need to be filtered too
-    if len(filtering)>0:
-        regressors = filter_regressors(regressors, filtering, nTRs, TR)
+    if len(config.filtering)>0:
+        regressors = filter_regressors(regressors, config.filtering, nTRs, TR)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = niiImg.shape[0]
     for i in range(N):
@@ -369,8 +369,9 @@ normalize = 'zscore'
 isCifti = False
 keepMean = False
 queue = True
-filtering = []
-doScrubbing = False
+class config(object):
+    filtering = []
+    doScrubbing = False
 
 # customize path to get access to single runs
 def buildpath(subject,fmriRun):
@@ -476,7 +477,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
     else:
         'Wrong flavor, using default regressors: R dR'
         X = data   
-    if doScrubbing:
+    if config.doScrubbing:
         toCensor = np.loadtxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
         toReg = np.zeros((nTRs, 1))
         toReg[toCensor] = 1
@@ -504,8 +505,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
 	return niiImg
     censored = np.where(score>thr)
     np.savetxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), censored, delimiter='\n', fmt='%d')
-    global doScrubbing
-    doScrubbing = True
+    config.doScrubbing = True
     return niiImg
 
 def TissueRegression(niiImg, flavor, masks, imgInfo):
@@ -630,8 +630,7 @@ def TemporalFiltering(niiImg, flavor, masks, imgInfo):
     else:
         print 'Warning! Wrong temporal filtering flavor. Nothing was done'    
         return niiImg
-    global filtering
-    filtering = flavor
+    config.filtering = flavor
     return niiImg
     
 def ICAdenoising(niiImg, flavor, masks, imgInfo):

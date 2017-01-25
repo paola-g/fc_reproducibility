@@ -1,5 +1,4 @@
 from setupPipeline import *
-from nilearn.input_data import NiftiLabelsMasker
 def runPipeline(subject, fmriRun, fmriFile):
     
     timeStart = localtime()
