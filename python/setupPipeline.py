@@ -35,7 +35,7 @@ from scipy.fftpack import fft, dct
 
 # regressors: to filter, no. time points x no. regressors
 def filter_regressors(regressors, filtering, nTRs, TR):
-    if len(filtering==0):
+    if len(filtering)==0:
         print 'Error! Missing or wrong filtering flavor. Regressors were not filtered.'
     else:
         if filtering[0] == 'Butter':
@@ -47,9 +47,6 @@ def filter_regressors(regressors, filtering, nTRs, TR):
     return regressors
     
 def regress(niiImg, nTRs, TR, regressors, keepMean):
-    # if filtering has already been performed, regressors need to be filtered too
-    if len(config.filtering)>0:
-        regressors = filter_regressors(regressors, config.filtering, nTRs, TR)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = niiImg.shape[0]
     for i in range(N):
@@ -475,13 +472,18 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         data_roll2_squared = data_roll2 ** 2
         X = np.concatenate((data, data_squared, data_roll, data_roll_squared, data_roll2, data_roll2_squared), axis=1)
     else:
-        'Wrong flavor, using default regressors: R dR'
+        print 'Wrong flavor, using default regressors: R dR'
         X = data   
+
+    # if filtering has already been performed, regressors need to be filtered too
+    if len(config.filtering)>0:
+        X = filter_regressors(X, config.filtering, nTRs, TR)
+
     if config.doScrubbing:
         toCensor = np.loadtxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
         toReg = np.zeros((nTRs, 1))
         toReg[toCensor] = 1
-        return np.concatenate((X, toReg), axis=1)
+        X = np.concatenate((X, toReg), axis=1)
     return X
     
 
@@ -489,8 +491,9 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
     thr = flavor[1]
     if flavor[0] == 'DVARS':
         # pcSigCh
-        niiImg = 100 * niiImg / np.mean(niiImg,axis=1)[:,np.newaxis] -100
-        dt = np.diff(niiImg, n=1, axis=1)
+        niiImg2 = 100 * niiImg / np.mean(niiImg,axis=1)[:,np.newaxis] -100
+	niiImg2[np.where(np.isnan(niiImg2))] = 0
+        dt = np.diff(niiImg2, n=1, axis=1)
         dt = np.concatenate((np.zeros((dt.shape[0],1)), dt), axis=1)
         score = np.sqrt(np.mean(dt**2,0))        
     elif flavor[0] == 'FD':
