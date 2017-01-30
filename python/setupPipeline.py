@@ -688,6 +688,23 @@ sortedOperations = sorted(Operations, key=operator.itemgetter(1))
 steps = {}
 Flavors = {}
 cstep = 0
+
+# If requested, scrubbing is performed first, before any denoising step
+scrub_idx = -1
+curr_idx = -1
+for opr in sortedOperations:
+    curr_idx = curr_idx+1
+    if opr[0] == 'Scrubbing' and opr[1] != 1:
+        scrub_idx = opr[1]
+        break
+        
+if scrub_idx != -1:        
+    for opr in sortedOperations:  
+        if opr[1] != 0 and opr[1] < scrub_idx:
+            opr[1] = opr[1]+1
+
+sortedOperations[curr_idx][1] = 1    
+
 for opr in sortedOperations:
     if opr[1]==0:
         continue
