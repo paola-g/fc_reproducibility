@@ -491,11 +491,12 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
     thr = flavor[1]
     if flavor[0] == 'DVARS':
         # pcSigCh
-        niiImg2 = 100 * niiImg / np.mean(niiImg,axis=1)[:,np.newaxis] -100
-	niiImg2[np.where(np.isnan(niiImg2))] = 0
+        meanImg = np.mean(niiImg,axis=1)[:,np.newaxis]
+        niiImg2 = 100 * (niiImg - meanImg) / meanImg
+        niiImg2[np.where(np.isnan(niiImg2))] = 0
         dt = np.diff(niiImg2, n=1, axis=1)
         dt = np.concatenate((np.zeros((dt.shape[0],1)), dt), axis=1)
-        score = np.sqrt(np.mean(dt**2,0))        
+        score = np.sqrt(np.mean(dt**2,0))   
     elif flavor[0] == 'FD':
         motionFile = op.join(buildpath(subject,fmriRun), 'Movement_Regressors_dt.txt')
         dmotpars = np.abs(np.genfromtxt(motionFile)[:,6:]) #derivatives
