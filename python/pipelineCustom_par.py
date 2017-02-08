@@ -40,7 +40,7 @@ score = df[config.outScore]
 
 # In[ ]:
 
-ResultsDir = 'test/Results'
+ResultsDir = op.join(DATADIR,'Results')
 if not op.isdir(ResultsDir): mkdir(ResultsDir)
 ResultsDir = op.join(ResultsDir, config.pipelineName)
 if not op.isdir(ResultsDir): mkdir(ResultsDir)
