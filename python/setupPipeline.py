@@ -46,7 +46,11 @@ def filter_regressors(regressors, filtering, nTRs, TR):
             regressors = signal.lfilter(w,1,regressors, axis=0)  
     return regressors
     
-def regress(niiImg, nTRs, TR, regressors, keepMean):
+def regress(niiImg, nTRs, TR, regressors, keepMean=False, preWhitening=False):
+    if preWhitening:
+        W = prewhitening(niiImg, nTRs, TR, X)
+        niiImg = np.dot(niiImg,W)
+        X = np.dot(W,design)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = niiImg.shape[0]
     for i in range(N):
@@ -88,7 +92,7 @@ def legendre_poly(order, nTRs):
     return y
 
 def load_img(fmriFile, maskAll):
-    if isCifti:
+    if config.isCifti:
         toUnzip = fmriFile.replace('_Atlas.dtseries.nii','.nii.gz')
         cmd = 'wb_command -cifti-convert -to-text {} {}'.format(fmriFile,op.join(buildpath(subject,fmriRun),'.tsv'))
         call(cmd,shell=True)
@@ -349,26 +353,179 @@ def dctmtx(N):
         C[:,k] = np.sqrt(2/N)*np.cos([np.pi*x*(k-1)/(2*N) for x in doublen])        
     return C 
     
+# from nipy
+def orth(X, tol=1.0e-07):
+    """
+    
+    Compute orthonormal basis for the column span of X.
+    
+    Rank is determined by zeroing all singular values, u, less
+    than or equal to tol*u.max().
+    INPUTS:
+        X  -- n-by-p matrix
+    OUTPUTS:
+        B  -- n-by-rank(X) matrix with orthonormal columns spanning
+              the column rank of X
+    """
+
+    B, u, _ = linalg.svd(X, full_matrices=False)
+    nkeep = np.greater(u, tol*u.max()).astype(np.int).sum()
+    return B[:,:nkeep]
+
+def reml(sigma, components, design=None, n=1, niter=128,
+         penalty_cov=np.exp(-32), penalty_mean=0):
+    """
+    Adapted from spm_reml.m
+    ReML estimation of covariance components from sigma using design matrix.
+    INPUTS:
+        sigma        -- m-by-m covariance matrix
+        components   -- q-by-m-by-m array of variance components
+                        mean of sigma is modeled as a some over components[i]
+        design       -- m-by-p design matrix whose effect is to be removed for
+                        ReML. If None, no effect removed (???)
+        n            -- degrees of freedom of sigma
+        penalty_cov  -- quadratic penalty to be applied in Fisher algorithm.
+                        If the value is a float, f, the penalty is
+                        f * identity(m). If the value is a 1d array, this is
+                        the diagonal of the penalty. 
+        penalty_mean -- mean of quadratic penalty to be applied in Fisher
+                        algorithm. If the value is a float, f, the location
+                        is f * np.ones(m).
+    OUTPUTS:
+        C            -- estimated mean of sigma
+        h            -- array of length q representing coefficients
+                        of variance components
+        cov_h        -- estimated covariance matrix of h
+    """
+
+    # initialise coefficient, gradient, Hessian
+
+    Q = components
+    PQ = np.zeros(Q.shape)
+    
+    q = Q.shape[0]
+    m = Q.shape[1]
+
+    # coefficient
+    h = np.array([np.diag(Q[i]).mean() for i in range(q)])
+
+    ## SPM initialization
+    ## h = np.array([np.any(np.diag(Q[i])) for i in range(q)]).astype(np.float)
+
+    C = np.sum([h[i] * Q[i] for i in range(Q.shape[0])], axis=0)
+
+    # gradient in Fisher algorithm
+    
+    dFdh = np.zeros(q)
+
+    # Hessian in Fisher algorithm
+    dFdhh = np.zeros((q,q))
+
+    # penalty terms
+
+    penalty_cov = np.asarray(penalty_cov)
+    if penalty_cov.shape == ():
+        penalty_cov = penalty_cov * np.identity(q)
+    elif penalty_cov.shape == (q,):
+        penalty_cov = np.diag(penalty_cov)
+        
+    penalty_mean = np.asarray(penalty_mean)
+    if penalty_mean.shape == ():
+        penalty_mean = np.ones(q) * penalty_mean
+        
+    # compute orthonormal basis of design space
+
+    if design is not None:
+        X = orth(design)
+    else:
+        X = None
+
+    _iter = 0
+    _F = np.inf
+    
+    while True:
+
+        # Current estimate of mean parameter
+
+        iC = linalg.inv(C + np.identity(m) / np.exp(32))
+
+        # E-step: conditional covariance 
+
+        if X is not None:
+            iCX = np.dot(iC, X)
+            Cq = linalg.inv(np.dot(X.T, iCX))
+            P = iC - np.dot(iCX, np.dot(Cq, iCX.T))
+        else:
+            P = iC
+
+        # M-step: ReML estimate of hyperparameters
+ 
+        # Gradient dF/dh (first derivatives)
+        # Expected curvature (second derivatives)
+
+        U = np.identity(m) - np.dot(P, sigma) / n
+
+        for i in range(q):
+            PQ[i] = np.dot(P, Q[i])
+            dFdh[i] = -(PQ[i] * U).sum() * n / 2
+
+            for j in range(i+1):
+                dFdhh[i,j] = -(PQ[i]*PQ[j]).sum() * n / 2
+                dFdhh[j,i] = dFdhh[i,j]
+                
+        # Enforce penalties:
+
+        dFdh  = dFdh  - np.dot(penalty_cov, h - penalty_mean)
+        dFdhh = dFdhh - penalty_cov
+
+        dh = linalg.solve(dFdhh, dFdh)
+        h -= dh
+        C = np.sum([h[i] * Q[i] for i in range(Q.shape[0])], axis=0)
+        
+        df = (dFdh * dh).sum()
+        if np.fabs(df) < 1.0e-01:
+            break
+
+        _iter += 1
+        if _iter >= niter:
+            break
+
+    return C, h, -dFdhh
+
+def sqrtm(V):
+    u, s, _  = linalg.svd(V)
+    s = np.sqrt(np.abs(np.diag(s)))
+    m = s.shape[0]
+    return np.dot(u, np.dot(s, u.T))
+
+def prewhitening(niiImg, nTRs, TR, X):
+    T = np.arange(nTRs) * TR
+    d = 2 ** (np.floor(np.arange(np.log2(TR/4), 7)))
+    Q = [linalg.toeplitz((T**j)*np.exp(-T/d[i])) for i in range(len(d)) for j in [0,1]]
+    CY = np.cov(niiImg.T)
+    V, h, _ = reml(CY, Q, design=X, n=1)
+    W = linalg.inv(sqrtm(V))
+    return W
+
 # ### Parameters
 
 # In[84]:
-pipelineName = 'Finn'
-behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
-release = 'Q2'
-outScore = 'PMAT24_A_CR'
-parcellation = 'shenetal_neuroimage2013'
-overwrite = False
-thisRun = 'rfMRI_REST1'
-isDataClean = False
-doPlot = False
-queue = False
-normalize = 'zscore'
-isCifti = False
-keepMean = False
-queue = True
 class config(object):
     filtering = []
     doScrubbing = False
+    behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
+    release = 'Q2'
+    outScore = 'PMAT24_A_CR'
+    pipelineName = 'Finn'
+    parcellation = 'shenetal_neuroimage2013'
+    overwrite = False
+    thisRun = 'rfMRI_REST1'
+    isDataClean = False
+    doPlot = True
+    queue = False
+    isCifti = False
+    keepMean = False
+    preWhitening = False
 
 # customize path to get access to single runs
 def buildpath(subject,fmriRun):
@@ -392,16 +549,16 @@ PARCELDIR=getParcelDir(HOST)
 #DATADIR = '/media/paola/HCP/'
 #PARCELDIR = '/home/paola/parcellations'
 
-if queue: priority=-100
+if config.queue: priority=-100
 
-if thisRun == 'rfMRI_REST1':
+if config.thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
-elif thisRun == 'rfMRI_REST2':
+elif config.thisRun == 'rfMRI_REST2':
     outMat = 'rest_1_mat'
 else:
     sys.exit("Invalid run code")  
     
-suffix = '_hp2000_clean' if isDataClean else ''   
+suffix = '_hp2000_clean' if config.isDataClean else ''   
 
 
 
@@ -523,14 +680,14 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
     maskAll, maskWM_, maskCSF_, maskGM_ = masks
     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
 
-    if isCifti:
+    if config.isCifti:
         niiImgGM = niiImg
     else:
         niiImgGM = niiImg[maskGM_,:]
         
     if flavor[0] == 'CompCor':
         X = extract_noise_components(niiImg, num_components=flavor[1])
-        niiImgGM = regress(niiImgGM, nTRs, X, keepMean)
+        niiImgGM = regress(niiImgGM, nTRs, X, config.keepMean, config.preWhitening)
     elif flavor[0] == 'WMCSF':
         meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
@@ -539,10 +696,24 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         meanCSF = meanCSF - np.mean(meanCSF)
         meanCSF = meanCSF/max(meanCSF)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
-        niiImgGM = regress(niiImgGM, nTRs, X, keepMean)
+        niiImgGM = regress(niiImgGM, nTRs, X, config.keepMean, config.preWhitening)
+    elif flavor[0] == 'WMCSF+dt':
+        meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
+        meanWM = meanWM - np.mean(meanWM)
+        meanWM = meanWM/max(meanWM)
+        meanCSF = np.mean(np.float64(niiImg[maskCSF_,:]),axis=0)
+        meanCSF = meanCSF - np.mean(meanCSF)
+        meanCSF = meanCSF/max(meanCSF)
+        dtWM=np.zeros(meanWM.shape)
+        dtWM[1:] = np.diff(meanWM, n=1)
+        dtCSF=np.zeros(meanCSF.shape)
+        dtCSF[1:] = np.diff(meanCSF, n=1)
+        X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis], 
+                             dtWM[:,np.newaxis], dtCSF[:,np.newaxis]), axis=1)
+        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.keepMean, config.preWhitening)
     else:
 	print 'Warning! Wrong tissue regression flavor. Nothing was done.' 
-    if not isCifti:
+    if not config.isCifti:
         niiImg[maskGM_,:] = niiImgGM
     else:
         niiImg = niiImgGM
@@ -556,7 +727,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
         niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:]    
         if flavor[0] == 'legendre':
             y = legendre_poly(flavor[1],nTRs)
-            niiImgWMCSF = regress(niiImgWMCSF, nTRs, y.T, keepMean)
+            niiImgWMCSF = regress(niiImgWMCSF, nTRs, y.T, config.keepMean, config.preWhitening)
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
             nPoly = flavor[0] + 1
@@ -565,19 +736,19 @@ def Detrending(niiImg, flavor, masks, imgInfo):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
                 y[i,:] = y[i,:] - np.mean(y[i,:])
                 y[i,:] = y[i,:]/np.max(y[i,:]) 
-            niiImgWMCSF = regress(niiImgWMCSF, nTRs, y.T, keepMean)
+            niiImgWMCSF = regress(niiImgWMCSF, nTRs, y.T, config.keepMean, config.preWhitening)
         else:
             print 'Warning! Wrong detrend flavor. Nothing was done'    
         niiImg[np.logical_or(maskWM_,maskCSF_),:] = niiImgWMCSF
     elif flavor[2] == 'GM':
-        if isCifti:
+        if config.isCifti:
             niiImgGM = niiImg
         else:
             niiImgGM = niiImg[maskGM_,:]
 
         if flavor[0] == 'legendre':
             y = legendre_poly(flavor[1], nTRs)
-            niiImgGM = regress(niiImgGM, nTRs, y.T, keepMean)
+            niiImgGM = regress(niiImgGM, nTRs, y.T, config.keepMean, config.preWhitening)
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
             nPoly = flavor[0] + 1
@@ -586,11 +757,11 @@ def Detrending(niiImg, flavor, masks, imgInfo):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
                 y[i,:] = y[i,:] - np.mean(y[i,:])
                 y[i,:] = y[i,:]/np.max(y[i,:])
-                niiImgGM = regress(niiImgGM, nTRs, y.T, keepMean)
+                niiImgGM = regress(niiImgGM, nTRs, y.T, config.keepMean, config.preWhitening)
         else:
             print 'Warning! Wrong detrend flavor. Nothing was done'
 
-        if not isCifti:
+        if not config.isCifti:
             niiImg[maskGM_,:] = niiImgGM
         else:
             niiImg = niiImgGM

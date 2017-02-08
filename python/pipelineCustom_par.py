@@ -2,12 +2,12 @@ from runPipeline import *
 
 # ### Get subjects
 
-df = pd.read_csv(behavFile)
+df = pd.read_csv(config.behavFile)
 
 # select subjects according to release
-if release == 'Q2':
+if config.release == 'Q2':
     ind = (df['Release'] == 'Q2')     | (df['Release'] == 'Q1')
-elif release == 'S500':
+elif config.release == 'S500':
     ind = (df['Release'] != 'Q2') & (df['Release'] != 'Q1')
 else:
     sys.exit("Invalid release code")
@@ -22,7 +22,7 @@ df = df[ind]
 # check if either of the two subjects recommended for exclusion by HCP are still present
 df = df[~df['Subject'].isin(['209733','528446'])]
 df.index = range(df.shape[0])
-print 'Selected', str(df.shape[0]), 'from the release',release
+print 'Selected', str(df.shape[0]), 'from the release',config.release
 print 'Number of males is:', df[df['Gender']=='M'].shape[0]
 tmpAgeRanges = sorted(df['Age'].unique())
 print 'Age range is', tmpAgeRanges[0].split('-')[0], '-', tmpAgeRanges[-1].split('-')[1]
@@ -32,7 +32,7 @@ subjects = df['Subject']
 # pull their IQ, Age, Gender
 age = df['Age']
 gender = df['Gender']
-score = df[outScore]
+score = df[config.outScore]
 
 
 # ### Exclusion of high-motion subjects
@@ -42,9 +42,9 @@ score = df[outScore]
 
 ResultsDir = 'test/Results'
 if not op.isdir(ResultsDir): mkdir(ResultsDir)
-ResultsDir = op.join(ResultsDir, pipelineName)
+ResultsDir = op.join(ResultsDir, config.pipelineName)
 if not op.isdir(ResultsDir): mkdir(ResultsDir)
-ResultsDir = op.join(ResultsDir, parcellation)
+ResultsDir = op.join(ResultsDir, config.parcellation)
 if not op.isdir(ResultsDir): mkdir(ResultsDir)
 
 PEdirs = ['LR', 'RL']
@@ -53,7 +53,7 @@ excludeSub = list()
 joblist = []
 for iSub in range(len(subjects)):
     subject = str(subjects[iSub])
-    RelRMSMeanFile = op.join(buildpath(subject, thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
+    RelRMSMeanFile = op.join(buildpath(subject, config.thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
     fLR = RelRMSMeanFile.replace('zz','LR');
     fRL = RelRMSMeanFile.replace('zz','RL');
     
@@ -72,13 +72,13 @@ for iSub in range(len(subjects)):
   
     for iPEdir in range(len(PEdirs)):
         PEdir=PEdirs[iPEdir]
-        fmriRun = thisRun+'_'+PEdir
-        if parcellation=='shenetal_neuroimage2013':
+        fmriRun = config.thisRun+'_'+PEdir
+        if config.parcellation=='shenetal_neuroimage2013':
             fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
-            isCifti=0
-        elif parcellation=='Glasser_Aseg_Suit':
+            config.isCifti=0
+        elif config.parcellation=='Glasser_Aseg_Suit':
             fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+'_Atlas'+suffix+'.dtseries.nii')
-            isCifti=1
+            config.isCifti=1
         else:
             print 'Wrong parcellation code'
             exit()
@@ -87,17 +87,17 @@ for iSub in range(len(subjects)):
             excludeSub.append(iSub)
             continue
         
-        if not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+thisRun+'_'+PEdir+'.txt'))) or overwrite:
-            if queue:
+        if not (op.isfile(op.join(ResultsDir, str(subjects[iSub])+'_'+config.thisRun+'_'+PEdir+'.txt'))) or config.overwrite:
+            if config.queue:
                 # make a script to load and preprocess that file, then save as .mat
-                jobDir = op.join(buildpath(str(subjects[iSub]),thisRun+'_'+PEdir),'jobs')
+                jobDir = op.join(buildpath(str(subjects[iSub]),config.thisRun+'_'+PEdir),'jobs')
                 if not op.isdir(jobDir): mkdir(jobDir)
                 thispythonfn = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
                 thispythonfn += 'from runPipeline import *\n'
                 thispythonfn += 'subject = "{}"\n'.format(subject)
                 thispythonfn += 'fmriRun = "{}"\n'.format(fmriRun)
 		thispythonfn += 'runPipeline("{}","{}","{}")\nEND'.format(subject,fmriRun,fmriFile)
-                jobName = 's{}_{}_{}_{}'.format(subjects[iSub],thisRun,PEdir, pipelineName)
+                jobName = 's{}_{}_{}_{}'.format(subjects[iSub],config.thisRun,PEdir, config.pipelineName)
                 # prepare a script
                 thisScript=op.join(jobDir,jobName+'.sh')
                 with open(thisScript,'w') as fidw:
@@ -116,7 +116,7 @@ for iSub in range(len(subjects)):
 
 indkeep = np.setdiff1d(range(len(subjects)),excludeSub, assume_unique=True)
 
-if queue:
+if config.queue:
     if len(joblist) != 0:
         print 'Waiting for jobs...'
         while True:
@@ -141,9 +141,9 @@ print 'With all subjects: corr(IQ,motion) = {:.3f} (p = {:.3f})'.format(rho2,p2)
 print 'After discarding high movers: corr(IQ,motion) = {:.3f} (p = {:.3f})'.format(rho1,p1)
 
 print 'Computing correlation matrices...'
-if parcellation=='shenetal_neuroimage2013':
+if config.parcellation=='shenetal_neuroimage2013':
     nParcels = 268
-elif parcellation=='Glasser_Aseg_Suit':
+elif config.parcellation=='Glasser_Aseg_Suit':
     nParcels = 405
 corrmats = np.zeros([nParcels,nParcels,len(indkeep)])
 scores = np.zeros([len(indkeep)])
@@ -151,8 +151,8 @@ index = 0
 for iSub in range(len(subjects)):
     if iSub not in excludeSub:
         PEdir=PEdirs[iPEdir] 
-        tsFile_LR=op.join(ResultsDir,str(subjects[iSub])+'_'+thisRun+'_LR.txt')
-        tsFile_RL=op.join(ResultsDir,str(subjects[iSub])+'_'+thisRun+'_RL.txt')
+        tsFile_LR=op.join(ResultsDir,str(subjects[iSub])+'_'+config.thisRun+'_LR.txt')
+        tsFile_RL=op.join(ResultsDir,str(subjects[iSub])+'_'+config.thisRun+'_RL.txt')
         ts_LR = np.loadtxt(tsFile_LR)
         ts_RL = np.loadtxt(tsFile_RL)
         # Fisher z transform of correlation coefficients
@@ -165,5 +165,5 @@ for iSub in range(len(subjects)):
         
 results = {}
 results[outMat] = corrmats
-results[outScore] = scores
-sio.savemat(op.join(ResultsDir,'{}_HCP_{}.mat'.format(thisRun,release)),results)
+results[config.outScore] = scores
+sio.savemat(op.join(ResultsDir,'{}_HCP_{}.mat'.format(config.thisRun,config.release)),results)
