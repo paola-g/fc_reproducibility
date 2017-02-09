@@ -49,9 +49,7 @@ class config(object):
     keepMean = False
     preWhitening = False
 
-# customize path to get access to single runs
-def buildpath(subject,fmriRun):
-    return 'test'
+
 # these functions allow Paola & Julien to run code locally with their own path definitions
 def getDataDir(x):
     return {
@@ -67,6 +65,11 @@ import socket
 HOST=socket.gethostname()
 DATADIR=getDataDir(HOST)
 PARCELDIR=getParcelDir(HOST)
+
+# customize path to get access to single runs
+def buildpath(subject,fmriRun):
+    #return op.join(DATADIR, subject,'MNINonLinear','Results',fmriRun)
+    return 'test'
 
 #DATADIR = '/media/paola/HCP/'
 #PARCELDIR = '/home/paola/parcellations'
