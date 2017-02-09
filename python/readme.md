@@ -7,6 +7,7 @@ Files:
 <li> runPipeline.py - python file for launching the pipeline on a single subject
 <li> pipelineCustom_par.py - python file for launching the pipeline on a cohort of subjects, supports SGE.
 </ul>
+
 ### Older versions
 #### First version
 Porting of Julien's MATLAB code, mainly based on FSL.<br>
@@ -32,7 +33,7 @@ Files:
 </ul>
 #### Nilearn version
 Implementation based on Nilearn, incomplete.<br>
-Files
+Files:
 <ul>
 <li>pipelineNilearn.py
 </ul>
