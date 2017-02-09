@@ -29,6 +29,96 @@ import xml.etree.cElementTree as ET
 from time import localtime, strftime, sleep
 from scipy.fftpack import fft, dct
 
+# ### Parameters
+
+# In[84]:
+class config(object):
+    filtering = []
+    doScrubbing = False
+    behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
+    release = 'Q2'
+    outScore = 'PMAT24_A_CR'
+    pipelineName = 'Finn'
+    parcellation = 'shenetal_neuroimage2013'
+    overwrite = False
+    thisRun = 'rfMRI_REST1'
+    isDataClean = False
+    doPlot = True
+    queue = False
+    isCifti = False
+    keepMean = False
+    preWhitening = False
+
+
+# these functions allow Paola & Julien to run code locally with their own path definitions
+def getDataDir(x):
+    return {
+        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/HCP/MRI',
+        'sculpin.caltech.edu': '/data/jdubois/data/HCP/MRI',
+    }.get(x, 'test')    # /media/paola/HCP is default if x not found
+def getParcelDir(x):
+    return {
+        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
+        'sculpin.caltech.edu': '/data/jdubois/data/parcellations/',
+    }.get(x, '/data/pgaldi/parcellations/')    # /home/paola/parcellations/ is default if x not found
+import socket
+HOST=socket.gethostname()
+DATADIR=getDataDir(HOST)
+PARCELDIR=getParcelDir(HOST)
+
+# customize path to get access to single runs
+def buildpath(subject,fmriRun):
+    #return op.join(DATADIR, subject,'MNINonLinear','Results',fmriRun)
+    return 'test'
+
+#DATADIR = '/media/paola/HCP/'
+#PARCELDIR = '/home/paola/parcellations'
+
+if config.queue: priority=-100
+
+if config.thisRun == 'rfMRI_REST1':
+    outMat = 'rest_1_mat'
+elif config.thisRun == 'rfMRI_REST2':
+    outMat = 'rest_1_mat'
+else:
+    sys.exit("Invalid run code")  
+    
+suffix = '_hp2000_clean' if config.isDataClean else ''   
+
+
+
+# In[101]:
+
+subject = '734045'
+fmriRun = 'rfMRI_REST1_LR'
+fmriFile = op.join(buildpath(subject,fmriRun),'rfMRI_REST1_LR.nii.gz')
+
+
+# ### Pipeline definition
+
+# The pipeline workflow is defined by two dictionaries. 
+# 
+# The struct <b>Operations</b> encodes the order of generic pipeline steps, with 0 for skipping an operation, and otherwise a number indicating when the operation should be performed. Note that several operations may have the same position (e.g., motion regression and tissue regression may both have order = 3, which means they should be performed in the same regression). For each operation an array encodes the flavor of each step and parameters when needed.
+
+# #### Finn's pipeline
+
+# In[32]:
+
+Operations= [
+    ['VoxelNormalization',      1, ['zscore']],
+    ['Detrending',              2, ['legendre', 3, 'WMCSF']],
+    ['TissueRegression',        3, ['WMCSF']],
+    ['MotionRegression',        4, ['[R dR]']],
+    ['TemporalFiltering',       5, ['Gaussian', 1]],
+    ['Detrending',              6, ['legendre', 3,'GM']],
+    ['GlobalSignalRegression',  7, []],
+    ['Scrubbing',               0, ['fd', 0.2]],
+    ['SpatialSmoothing',        0, ['Gaussian', 6]],
+    ['ICAdenoising',            0, ['ICAFIX']],
+]
+
+
+
 # ### Utils
 
 # In[95]:
@@ -507,91 +597,6 @@ def prewhitening(niiImg, nTRs, TR, X):
     W = linalg.inv(sqrtm(V))
     return W
 
-# ### Parameters
-
-# In[84]:
-class config(object):
-    filtering = []
-    doScrubbing = False
-    behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
-    release = 'Q2'
-    outScore = 'PMAT24_A_CR'
-    pipelineName = 'Finn'
-    parcellation = 'shenetal_neuroimage2013'
-    overwrite = False
-    thisRun = 'rfMRI_REST1'
-    isDataClean = False
-    doPlot = True
-    queue = False
-    isCifti = False
-    keepMean = False
-    preWhitening = False
-
-# customize path to get access to single runs
-def buildpath(subject,fmriRun):
-    return 'test'
-# these functions allow Paola & Julien to run code locally with their own path definitions
-def getDataDir(x):
-    return {
-        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/HCP/MRI',
-        'sculpin.caltech.edu': '/data/jdubois/data/HCP/MRI',
-    }.get(x, 'test')    # /media/paola/HCP is default if x not found
-def getParcelDir(x):
-    return {
-        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
-        'sculpin.caltech.edu': '/data/jdubois/data/parcellations/',
-    }.get(x, '/data/pgaldi/parcellations/')    # /home/paola/parcellations/ is default if x not found
-import socket
-HOST=socket.gethostname()
-DATADIR=getDataDir(HOST)
-PARCELDIR=getParcelDir(HOST)
-
-#DATADIR = '/media/paola/HCP/'
-#PARCELDIR = '/home/paola/parcellations'
-
-if config.queue: priority=-100
-
-if config.thisRun == 'rfMRI_REST1':
-    outMat = 'rest_1_mat'
-elif config.thisRun == 'rfMRI_REST2':
-    outMat = 'rest_1_mat'
-else:
-    sys.exit("Invalid run code")  
-    
-suffix = '_hp2000_clean' if config.isDataClean else ''   
-
-
-
-# In[101]:
-
-subject = '734045'
-fmriRun = 'rfMRI_REST1_LR'
-fmriFile = op.join(buildpath(subject,fmriRun),'rfMRI_REST1_LR.nii.gz')
-
-
-# ### Pipeline definition
-
-# The pipeline workflow is defined by two dictionaries. 
-# 
-# The struct <b>Operations</b> encodes the order of generic pipeline steps, with 0 for skipping an operation, and otherwise a number indicating when the operation should be performed. Note that several operations may have the same position (e.g., motion regression and tissue regression may both have order = 3, which means they should be performed in the same regression). For each operation an array encodes the flavor of each step and parameters when needed.
-
-# #### Finn's pipeline
-
-# In[32]:
-
-Operations= [
-    ['VoxelNormalization',      1, ['zscore']],
-    ['Detrending',              2, ['legendre', 3, 'WMCSF']],
-    ['TissueRegression',        3, ['WMCSF']],
-    ['MotionRegression',        4, ['[R dR]']],
-    ['TemporalFiltering',       5, ['Gaussian', 1]],
-    ['Detrending',              6, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  7, []],
-    ['Scrubbing',               0, ['fd', 0.2]],
-    ['SpatialSmoothing',        0, ['Gaussian', 6]],
-    ['ICAdenoising',            0, ['ICAFIX']],
-]
-
 
 # ### Pipeline setup
 
@@ -601,9 +606,6 @@ Operations= [
 
 def MotionRegression(niiImg, flavor, masks, imgInfo):
     # assumes that data is organized as in the HCP
-    maskAll, maskWM_, maskCSF_, maskGM_ = masks
-    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
-
     motionFile = op.join(buildpath(subject,fmriRun), 'Movement_Regressors_dt.txt')
     data = np.genfromtxt(motionFile)
     if flavor[0] == 'R':
@@ -815,25 +817,13 @@ def TemporalFiltering(niiImg, flavor, masks, imgInfo):
     config.filtering = flavor
     return niiImg
     
-def ICAdenoising(niiImg, flavor, masks, imgInfo):
-    maskAll, maskWM_, maskCSF_, maskGM_ = masks
-    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
-
-    print 'ICAdenoising : '+flavor
-
 def GlobalSignalRegression(niiImg, flavor, masks, imgInfo):
-    maskAll, maskWM_, maskCSF_, maskGM_ = masks
-    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
-
     meanAll = np.mean(niiImg,axis=0)
     meanAll = meanAll - np.mean(meanAll)
     meanAll = meanAll/max(meanAll)
     return meanAll[:,np.newaxis]
 
 def VoxelNormalization(niiImg, flavor, masks, imgInfo):
-    maskAll, maskWM_, maskCSF_, maskGM_ = masks
-    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
-
     if flavor[0] == 'zscore':
         niiImg = stats.zscore(niiImg, axis=1, ddof=1)
         return niiImg
