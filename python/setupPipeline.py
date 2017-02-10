@@ -44,7 +44,7 @@ class config(object):
     thisRun = 'rfMRI_REST1'
     isDataClean = False
     doPlot = True
-    queue = True
+    queue = False
     isCifti = False
     keepMean = False
     preWhitening = False
@@ -787,7 +787,7 @@ def SpatialSmoothing(niiImg, flavor, masks, imgInfo):
         niiImg = niiimg[maskAll,:]
     elif flavor[0] == 'GaussianGM':
         GMmaskFile = op.join(buildpath(subject,fmriRun),'GMmask.nii')
-        NiftiMasker(mask_img=GMmaskFile, sessions=None, smoothing_fwhm=flavor[1])
+        masker = NiftiMasker(mask_img=GMmaskFile, sessions=None, smoothing_fwhm=flavor[1])
         niiImg[maskGM_,:] = masker.fit_transform(newimg).T
     else:
         print 'Warning! Wrong smoothing flavor. Nothing was done'
