@@ -129,7 +129,7 @@ def filter_regressors(regressors, filtering, nTRs, TR):
     else:
         if filtering[0] == 'Butter':
             regressors = clean(regressors, detrend=False, standardize=False, 
-                                  t_r=TR, high_pass=filtering[1], low_pass=filtering[2]).T
+                                  t_r=TR, high_pass=filtering[1], low_pass=filtering[2])
         elif filtering[0] == 'Gaussian':
             w = signal.gaussian(11,std=filtering[1])
             regressors = signal.lfilter(w,1,regressors, axis=0)  
@@ -604,7 +604,6 @@ def prewhitening(niiImg, nTRs, TR, X):
 # In[71]:
 
 def MotionRegression(niiImg, flavor, masks, imgInfo):
-    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
     # assumes that data is organized as in the HCP
     motionFile = op.join(buildpath(subject,fmriRun), 'Movement_Regressors_dt.txt')
     data = np.genfromtxt(motionFile)
@@ -636,8 +635,8 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
 
     # if filtering has already been performed, regressors need to be filtered too
     if len(config.filtering)>0:
+        nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         X = filter_regressors(X, config.filtering, nTRs, TR)
-
     if config.doScrubbing:
         toCensor = np.loadtxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
         toReg = np.zeros((nTRs, 1))
