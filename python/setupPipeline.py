@@ -114,7 +114,6 @@ Operations= [
     ['GlobalSignalRegression',  7, []],
     ['Scrubbing',               0, ['fd', 0.2]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
-    ['ICAdenoising',            0, ['ICAFIX']],
 ]
 
 
@@ -841,7 +840,6 @@ Hooks={
     'Detrending'             : Detrending,
     'SpatialSmoothing'       : SpatialSmoothing,
     'TemporalFiltering'      : TemporalFiltering,  
-    'ICAdenoising'           : ICAdenoising,
     'GlobalSignalRegression' : GlobalSignalRegression,  
     'VoxelNormalization'     : VoxelNormalization,
 }
