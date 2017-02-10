@@ -107,7 +107,6 @@ def runPipeline(subject, fmriRun, fmriFile):
     tsDir = op.join(buildpath(subject,fmriRun),config.parcellation)
     if not op.isdir(tsDir): mkdir(tsDir)
     alltsFile = op.join(ResultsDir,subject+'_'+fmriRun+'.txt')
-    print tsDir, alltsFile
     #masker = NiftiLabelsMasker(labels_img=op.join(PARCELDIR, config.parcellation,'fconn_atlas_150_2mm.nii'))
     #time_series = masker.fit_transform(op.join(buildpath(subject,fmriRun), outFile+'.nii.gz'))
     #print time_series.shape
