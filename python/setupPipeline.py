@@ -139,7 +139,7 @@ def regress(niiImg, nTRs, TR, regressors, keepMean=False, preWhitening=False):
     if preWhitening:
         W = prewhitening(niiImg, nTRs, TR, regressors)
         niiImg = np.dot(niiImg,W)
-        regressors = np.dot(W,design)
+        regressors = np.dot(W,regressors)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = niiImg.shape[0]
     for i in range(N):
