@@ -732,7 +732,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
             niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y.T, config.keepMean, config.preWhitening)
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
-            nPoly = flavor[0] + 1
+            nPoly = flavor[1] + 1
             y = np.ones((nPoly,len(x)))
             for i in range(nPoly):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
@@ -753,7 +753,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
             niiImgGM = regress(niiImgGM, nTRs, TR, y.T, config.keepMean, config.preWhitening)
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
-            nPoly = flavor[0] + 1
+            nPoly = flavor[1] + 1
             y = np.ones((nPoly,len(x)))
             for i in range(nPoly):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
