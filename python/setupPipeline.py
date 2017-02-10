@@ -44,7 +44,7 @@ class config(object):
     thisRun = 'rfMRI_REST1'
     isDataClean = False
     doPlot = True
-    queue = False
+    queue = True
     isCifti = False
     keepMean = False
     preWhitening = False
@@ -108,11 +108,11 @@ Operations= [
     ['VoxelNormalization',      1, ['zscore']],
     ['Detrending',              2, ['legendre', 3, 'WMCSF']],
     ['TissueRegression',        3, ['WMCSF']],
-    ['MotionRegression',        4, ['[R dR]']],
+    ['MotionRegression',        4, ['R dR']],
     ['TemporalFiltering',       5, ['Gaussian', 1]],
     ['Detrending',              6, ['legendre', 3,'GM']],
     ['GlobalSignalRegression',  7, []],
-    ['Scrubbing',               0, ['fd', 0.2]],
+    ['Scrubbing',               0, ['FD', 0.2]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
 ]
 
@@ -638,6 +638,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         X = filter_regressors(X, config.filtering, nTRs, TR)
     if config.doScrubbing:
+        nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         toCensor = np.loadtxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
         toReg = np.zeros((nTRs, 1))
         toReg[toCensor] = 1
