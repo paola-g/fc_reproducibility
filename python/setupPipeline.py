@@ -604,6 +604,7 @@ def prewhitening(niiImg, nTRs, TR, X):
 # In[71]:
 
 def MotionRegression(niiImg, flavor, masks, imgInfo):
+    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
     # assumes that data is organized as in the HCP
     motionFile = op.join(buildpath(subject,fmriRun), 'Movement_Regressors_dt.txt')
     data = np.genfromtxt(motionFile)
@@ -671,7 +672,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         a_minus = [i-k for i in censored[0] for k in range(1, pad+1)]
         a_plus  = [i+k for i in censored[0] for k in range(1, pad+1)]
         censored = np.concatenate((censored[0], a_minus, a_plus))
-        censored = np.unique(censored[np.where(np.logical_and(a>=0, a<len(score)))])
+        censored = np.unique(censored[np.where(np.logical_and(censored>=0, censored<len(score)))])
 
     np.savetxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), censored, delimiter='\n', fmt='%d')
     config.doScrubbing = True
