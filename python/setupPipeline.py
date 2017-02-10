@@ -320,7 +320,7 @@ def makeTissueMasks(subject,fmriRun,overwrite):
     return maskAll, maskWM_, maskCSF_, maskGM_
 
 
-def extract_noise_components(niiImg, num_components=5, extra_regressors=None):
+def extract_noise_components(niiImg, WMmask, CSFmask, num_components=5, extra_regressors=None):
     """Largely based on https://github.com/nipy/nipype/blob/master/examples/
     rsfmri_vol_surface_preprocessing_nipy.py#L261
     Derive components most reflective of physiological noise according to
@@ -334,7 +334,7 @@ def extract_noise_components(niiImg, num_components=5, extra_regressors=None):
     -------
     components: n_time_points x regressors
     """
-    niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:] 
+    niiImgWMCSF = niiImg[np.logical_or(WMmask,CSFmask),:] 
     
     niiImgWMCSF[np.isnan(np.sum(niiImgWMCSF, axis=1)), :] = 0
     # remove mean and normalize by variance
@@ -687,8 +687,8 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         niiImgGM = niiImg[maskGM_,:]
         
     if flavor[0] == 'CompCor':
-        X = extract_noise_components(niiImg, num_components=flavor[1])
-        niiImgGM = regress(niiImgGM, nTRs, X, config.keepMean, config.preWhitening)
+        X = extract_noise_components(niiImg, maskWM_, maskCSF_, num_components=flavor[1])
+        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.keepMean, config.preWhitening)
     elif flavor[0] == 'WMCSF':
         meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
@@ -697,7 +697,7 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         meanCSF = meanCSF - np.mean(meanCSF)
         meanCSF = meanCSF/max(meanCSF)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
-        niiImgGM = regress(niiImgGM, nTRs, X, config.keepMean, config.preWhitening)
+        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.keepMean, config.preWhitening)
     elif flavor[0] == 'WMCSF+dt':
         meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
@@ -728,7 +728,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
         niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:]    
         if flavor[0] == 'legendre':
             y = legendre_poly(flavor[1],nTRs)
-            niiImgWMCSF = regress(niiImgWMCSF, nTRs, y.T, config.keepMean, config.preWhitening)
+            niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y.T, config.keepMean, config.preWhitening)
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
             nPoly = flavor[0] + 1
@@ -737,7 +737,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
                 y[i,:] = y[i,:] - np.mean(y[i,:])
                 y[i,:] = y[i,:]/np.max(y[i,:]) 
-            niiImgWMCSF = regress(niiImgWMCSF, nTRs, y.T, config.keepMean, config.preWhitening)
+            niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y.T, config.keepMean, config.preWhitening)
         else:
             print 'Warning! Wrong detrend flavor. Nothing was done'    
         niiImg[np.logical_or(maskWM_,maskCSF_),:] = niiImgWMCSF
@@ -749,7 +749,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
 
         if flavor[0] == 'legendre':
             y = legendre_poly(flavor[1], nTRs)
-            niiImgGM = regress(niiImgGM, nTRs, y.T, config.keepMean, config.preWhitening)
+            niiImgGM = regress(niiImgGM, nTRs, TR, y.T, config.keepMean, config.preWhitening)
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
             nPoly = flavor[0] + 1
@@ -758,7 +758,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
                 y[i,:] = y[i,:] - np.mean(y[i,:])
                 y[i,:] = y[i,:]/np.max(y[i,:])
-                niiImgGM = regress(niiImgGM, nTRs, y.T, config.keepMean, config.preWhitening)
+                niiImgGM = regress(niiImgGM, nTRs, TR, y.T, config.keepMean, config.preWhitening)
         else:
             print 'Warning! Wrong detrend flavor. Nothing was done'
 
