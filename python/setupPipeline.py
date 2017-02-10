@@ -137,9 +137,9 @@ def filter_regressors(regressors, filtering, nTRs, TR):
     
 def regress(niiImg, nTRs, TR, regressors, keepMean=False, preWhitening=False):
     if preWhitening:
-        W = prewhitening(niiImg, nTRs, TR, X)
+        W = prewhitening(niiImg, nTRs, TR, regressors)
         niiImg = np.dot(niiImg,W)
-        X = np.dot(W,design)
+        regressors = np.dot(W,design)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = niiImg.shape[0]
     for i in range(N):
@@ -590,7 +590,7 @@ def sqrtm(V):
 def prewhitening(niiImg, nTRs, TR, X):
     T = np.arange(nTRs) * TR
     d = 2 ** (np.floor(np.arange(np.log2(TR/4), 7)))
-    Q = [linalg.toeplitz((T**j)*np.exp(-T/d[i])) for i in range(len(d)) for j in [0,1]]
+    Q = np.array([linalg.toeplitz((T**j)*np.exp(-T/d[i])) for i in range(len(d)) for j in [0,1]])
     CY = np.cov(niiImg.T)
     V, h, _ = reml(CY, Q, design=X, n=1)
     W = linalg.inv(sqrtm(V))
