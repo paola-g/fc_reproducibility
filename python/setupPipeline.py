@@ -38,13 +38,13 @@ class config(object):
     behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
     release = 'Q2'
     outScore = 'PMAT24_A_CR'
-    pipelineName = 'Finn'
+    pipelineName = 'Finn_Q2_R1'
     parcellation = 'shenetal_neuroimage2013'
     overwrite = False
     thisRun = 'rfMRI_REST1'
     isDataClean = False
-    doPlot = True
-    queue = False
+    doPlot = False
+    queue = True
     isCifti = False
     keepMean = False
     preWhitening = False
@@ -55,7 +55,7 @@ def getDataDir(x):
     return {
         'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/HCP/MRI',
         'sculpin.caltech.edu': '/data/jdubois/data/HCP/MRI',
-    }.get(x, 'test')    # /media/paola/HCP is default if x not found
+    }.get(x, '/data/jdubois/data/HCP/MRI')    # /media/paola/HCP is default if x not found
 def getParcelDir(x):
     return {
         'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
@@ -68,8 +68,8 @@ PARCELDIR=getParcelDir(HOST)
 
 # customize path to get access to single runs
 def buildpath(subject,fmriRun):
-    #return op.join(DATADIR, subject,'MNINonLinear','Results',fmriRun)
-    return 'test'
+    return op.join(DATADIR, subject,'MNINonLinear','Results',fmriRun)
+    #return 'test'
 
 #DATADIR = '/media/paola/HCP/'
 #PARCELDIR = '/home/paola/parcellations'
@@ -85,13 +85,6 @@ else:
     
 suffix = '_hp2000_clean' if config.isDataClean else ''   
 
-
-
-# In[101]:
-
-subject = '734045'
-fmriRun = 'rfMRI_REST1_LR'
-fmriFile = op.join(buildpath(subject,fmriRun),'rfMRI_REST1_LR.nii.gz')
 
 
 # ### Pipeline definition
@@ -112,7 +105,7 @@ Operations= [
     ['TemporalFiltering',       5, ['Gaussian', 1]],
     ['Detrending',              6, ['legendre', 3,'GM']],
     ['GlobalSignalRegression',  7, []],
-    ['Scrubbing',               0, ['FD', 0.2]],
+    ['Scrubbing',               0, ['FD', 0.2, 1]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
 ]
 
@@ -176,21 +169,21 @@ def legendre_poly(order, nTRs):
         if i>0:
             y[i,:] = y[i,:] - np.mean(y[i,:])
             y[i,:] = y[i,:]/np.max(y[i,:])
-        np.savetxt(op.join(buildpath(subject,fmriRun),
+        np.savetxt(op.join(buildpath(config.subject,config.fmriRun),
                            'poly_detrend_legendre' + str(i) + '.txt'), y[i,:] ,fmt='%.4f')
     return y
 
 def load_img(fmriFile, maskAll):
     if config.isCifti:
         toUnzip = fmriFile.replace('_Atlas.dtseries.nii','.nii.gz')
-        cmd = 'wb_command -cifti-convert -to-text {} {}'.format(fmriFile,op.join(buildpath(subject,fmriRun),'.tsv'))
+        cmd = 'wb_command -cifti-convert -to-text {} {}'.format(fmriFile,op.join(buildpath(config.subject,config.fmriRun),'.tsv'))
         call(cmd,shell=True)
     else:
         toUnzip = fmriFile
 
     with open(toUnzip, 'rb') as fFile:
         decompressedFile = gzip.GzipFile(fileobj=fFile)
-        outFilePath = op.join(buildpath(subject, fmriRun), fmriRun+'.nii')
+        outFilePath = op.join(buildpath(config.subject, config.fmriRun), config.fmriRun+'.nii')
         with open(outFilePath, 'wb') as outfile:
             outfile.write(decompressedFile.read())
 
@@ -230,13 +223,21 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         ribbonFileout = op.join(buildpath(subject,fmriRun), 'ribbon.nii.gz')
         wmparcFileout = op.join(buildpath(subject,fmriRun), 'wmparc.nii.gz')
         # make identity matrix to feed to flirt for resampling
+        ribbonMat = op.join(buildpath(subject,fmriRun), 'ribbon_flirt.mat')
+        wmparcMat = op.join(buildpath(subject,fmriRun), 'wmparc_flirt.mat')
+        eyeMat = op.join(buildpath(subject,fmriRun), 'eye.mat')
+
         with open('eye.mat','w') as fid:
             fid.write('1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1')
         
-        flirt_ribbon = fsl.FLIRT(in_file=ribbonFilein, out_file=ribbonFileout,            reference=fmriFile, apply_xfm=True,            in_matrix_file='eye.mat', interp='nearestneighbour')
+        flirt_ribbon = fsl.FLIRT(in_file=ribbonFilein, out_file=ribbonFileout, 
+				reference=fmriFile, apply_xfm=True, 
+				in_matrix_file=eyeMat, out_matrix_file=ribbonMat, interp='nearestneighbour')
         flirt_ribbon.run()
 
-        flirt_wmparc = fsl.FLIRT(in_file=wmparcFilein, out_file=wmparcFileout,            reference=fmriFile, apply_xfm=True,            in_matrix_file='eye.mat', interp='nearestneighbour')
+        flirt_wmparc = fsl.FLIRT(in_file=wmparcFilein, out_file=wmparcFileout, 
+				reference=fmriFile, apply_xfm=True, 
+				in_matrix_file=eyeMat, out_matrix_file=wmparcMat, interp='nearestneighbour')
         flirt_wmparc.run()
         
         # load nii (ribbon & wmparc)
@@ -288,7 +289,7 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         nib.save(img, GMmaskFileout)
 
         # delete temporary files
-        cmd = 'rm eye.mat ribbon_flirt.mat wmparc_flirt.mat'
+        cmd = 'rm {} {} {}'.format(eyeMat, ribbonMat, wmparcMat)
         call(cmd,shell=True)
         
         
@@ -605,7 +606,7 @@ def prewhitening(niiImg, nTRs, TR, X):
 
 def MotionRegression(niiImg, flavor, masks, imgInfo):
     # assumes that data is organized as in the HCP
-    motionFile = op.join(buildpath(subject,fmriRun), 'Movement_Regressors_dt.txt')
+    motionFile = op.join(buildpath(config.subject,config.fmriRun), 'Movement_Regressors_dt.txt')
     data = np.genfromtxt(motionFile)
     if flavor[0] == 'R':
         X = data[:,:6]
@@ -639,7 +640,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         X = filter_regressors(X, config.filtering, nTRs, TR)
     if config.doScrubbing:
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
-        toCensor = np.loadtxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
+        toCensor = np.loadtxt(op.join(buildpath(config.subject,config.fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
         toReg = np.zeros((nTRs, 1))
         toReg[toCensor] = 1
         X = np.concatenate((X, toReg), axis=1)
@@ -657,7 +658,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         dt = np.concatenate((np.zeros((dt.shape[0],1)), dt), axis=1)
         score = np.sqrt(np.mean(dt**2,0))   
     elif flavor[0] == 'FD':
-        motionFile = op.join(buildpath(subject,fmriRun), 'Movement_Regressors_dt.txt')
+        motionFile = op.join(buildpath(config.subject,config.fmriRun), 'Movement_Regressors_dt.txt')
         dmotpars = np.abs(np.genfromtxt(motionFile)[:,6:]) #derivatives
         headradius=50 #50mm as in Powers et al.
         disp=dmotpars.copy()
@@ -674,7 +675,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         censored = np.concatenate((censored[0], a_minus, a_plus))
         censored = np.unique(censored[np.where(np.logical_and(censored>=0, censored<len(score)))])
 
-    np.savetxt(op.join(buildpath(subject,fmriRun), 'Censored_TimePoints.txt'), censored, delimiter='\n', fmt='%d')
+    np.savetxt(op.join(buildpath(config.subject,config.fmriRun), 'Censored_TimePoints.txt'), censored, delimiter='\n', fmt='%d')
     config.doScrubbing = True
     return niiImg
 
@@ -786,7 +787,7 @@ def SpatialSmoothing(niiImg, flavor, masks, imgInfo):
         niiimg = np.reshape(newimg.get_data(), (nRows*nCols*nSlices, nTRs), order='F')
         niiImg = niiimg[maskAll,:]
     elif flavor[0] == 'GaussianGM':
-        GMmaskFile = op.join(buildpath(subject,fmriRun),'GMmask.nii')
+        GMmaskFile = op.join(buildpath(config.subject,config.fmriRun),'GMmask.nii')
         masker = NiftiMasker(mask_img=GMmaskFile, sessions=None, smoothing_fwhm=flavor[1])
         niiImg[maskGM_,:] = masker.fit_transform(newimg).T
     else:

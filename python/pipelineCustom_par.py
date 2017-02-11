@@ -94,9 +94,9 @@ for iSub in range(len(subjects)):
                 if not op.isdir(jobDir): mkdir(jobDir)
                 thispythonfn = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
                 thispythonfn += 'from runPipeline import *\n'
-                thispythonfn += 'subject = "{}"\n'.format(subject)
-                thispythonfn += 'fmriRun = "{}"\n'.format(fmriRun)
-		thispythonfn += 'runPipeline("{}","{}","{}")\nEND'.format(subject,fmriRun,fmriFile)
+                thispythonfn += 'config.subject = "{}"\n'.format(subject)
+                thispythonfn += 'config.fmriRun = "{}"\n'.format(fmriRun)
+		thispythonfn += 'runPipeline("{}","{}","{}")\nEND\n'.format(subject,fmriRun,fmriFile)
                 jobName = 's{}_{}_{}_{}'.format(subjects[iSub],config.thisRun,PEdir, config.pipelineName)
                 # prepare a script
                 thisScript=op.join(jobDir,jobName+'.sh')
@@ -145,6 +145,14 @@ if config.parcellation=='shenetal_neuroimage2013':
     nParcels = 268
 elif config.parcellation=='Glasser_Aseg_Suit':
     nParcels = 405
+for iSub in range(len(subjects)):
+    if iSub not in excludeSub:
+        tsFile_LR=op.join(ResultsDir,str(subjects[iSub])+'_'+config.thisRun+'_LR.txt')
+        tsFile_RL=op.join(ResultsDir,str(subjects[iSub])+'_'+config.thisRun+'_RL.txt')
+        if not op.isfile(tsFile_LR) or not op.isfile(tsFile_RL):
+            excludeSub.append(iSub)
+            print ('Warning! Missing output file for subject',subjects[iSub])
+indkeep = np.setdiff1d(range(len(subjects)),excludeSub, assume_unique=True)
 corrmats = np.zeros([nParcels,nParcels,len(indkeep)])
 scores = np.zeros([len(indkeep)])
 index = 0

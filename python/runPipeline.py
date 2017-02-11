@@ -95,9 +95,9 @@ def runPipeline(subject, fmriRun, fmriFile):
     for iParcel in uniqueParcels:
         if not config.isCifti:
             parcelMaskFile = op.join(PARCELDIR,config.parcellation,'parcel{:03d}.nii.gz'.format(iParcel+1))
-            if not op.isfile(parcelMaskFile):
+            if not op.isfile(parcelMaskFile) or config.overwrite:
                 print 'Making a binary volume mask for each parcel'
-                mymaths1 = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, config.parcellation,'fconn_atlas_150_2mm.nii'),\
+                mymaths1 = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, config.parcellation,'shen_2mm_268_parcellation.nii.gz'),\
                     out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel+1-0.1, iParcel+1+0.1)) 
                 mymaths1.run()
     if not op.isfile(fmriFile):
@@ -116,7 +116,7 @@ def runPipeline(subject, fmriRun, fmriFile):
         print 'Extracting mean data from',str(len(uniqueParcels)),'parcels for ',outFile
         for iParcel in uniqueParcels:
             tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel+1))
-            if not op.isfile(tsFile):
+            if not op.isfile(tsFile) or config.overwrite:
                 if not config.isCifti:
                     parcelMaskFile = op.join(PARCELDIR,config.parcellation,'parcel{:03d}.nii.gz'.format(iParcel+1))
                     
@@ -137,3 +137,4 @@ def runPipeline(subject, fmriRun, fmriFile):
     print 'Concatenating data'
     cmd = 'paste '+op.join(tsDir,'parcel*.txt')+' > '+alltsFile
     call(cmd, shell=True)
+    return outFile
