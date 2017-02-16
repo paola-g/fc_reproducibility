@@ -162,6 +162,7 @@ for iSub in range(len(subjects)):
         np.fill_diagonal(corrMat_RL,1)
         corrmats[:,:,index] = (corrMat_LR + corrMat_RL)/2
         scores[index] = score[iSub]
+	index = index + 1
         
 results = {}
 results[outMat] = corrmats
