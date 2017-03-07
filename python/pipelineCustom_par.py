@@ -51,6 +51,7 @@ PEdirs = ['LR', 'RL']
 RelRMSMean = np.zeros([len(subjects), 2])
 excludeSub = list()
 joblist = []
+config.logfile = op.join(ResultsDir,'log_{}_HCP_{}.txt'.format(config.thisRun,config.release))
 for iSub in range(len(subjects)):
     subject = str(subjects[iSub])
     RelRMSMeanFile = op.join(buildpath(subject, config.thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
@@ -76,7 +77,13 @@ for iSub in range(len(subjects)):
         if config.parcellation=='shenetal_neuroimage2013':
             fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
             config.isCifti=0
+        elif config.parcellation=='shenetal_neuroimage2013_new':
+            fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
+            config.isCifti=0
         elif config.parcellation=='Glasser_Aseg_Suit':
+            fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+'_Atlas'+suffix+'.dtseries.nii')
+            config.isCifti=1
+        elif config.parcellation=='Glasser_CIT168Amy_Aseg_Suit':
             fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+'_Atlas'+suffix+'.dtseries.nii')
             config.isCifti=1
         else:
@@ -107,9 +114,11 @@ for iSub in range(len(subjects)):
                 cmd='chmod 774 '+thisScript
                 call(cmd,shell=True)
                 # call to fnSubmitToCluster
-                JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=20G'.format(priority))
+                JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=19G'.format(priority))
                 joblist.append(JobID)
             else:
+		config.subject = subject
+		config.fmriRun = fmriRun
                 runPipeline(subject, fmriRun, fmriFile)
         else:
             print subjects[iSub], ' : ', PEdir, 'results already computed; skipping'
@@ -143,8 +152,12 @@ print 'After discarding high movers: corr(IQ,motion) = {:.3f} (p = {:.3f})'.form
 print 'Computing correlation matrices...'
 if config.parcellation=='shenetal_neuroimage2013':
     nParcels = 268
+if config.parcellation=='shenetal_neuroimage2013_new':
+    nParcels = 268
 elif config.parcellation=='Glasser_Aseg_Suit':
     nParcels = 405
+elif config.parcellation=='Glasser_CIT168Amy_Aseg_Suit':
+    nParcels = 423
 for iSub in range(len(subjects)):
     if iSub not in excludeSub:
         tsFile_LR=op.join(ResultsDir,str(subjects[iSub])+'_'+config.thisRun+'_LR.txt')

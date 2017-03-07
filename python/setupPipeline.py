@@ -38,9 +38,9 @@ class config(object):
     behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
     release = 'Q2'
     outScore = 'PMAT24_A_CR'
-    pipelineName = 'Finn_Q2_R1'
-    parcellation = 'shenetal_neuroimage2013'
-    overwrite = False
+    pipelineName = 'Finn_Q2_R1_new'
+    parcellation = 'shenetal_neuroimage2013_new'
+    overwrite = True
     thisRun = 'rfMRI_REST1'
     isDataClean = False
     doPlot = False
@@ -53,14 +53,16 @@ class config(object):
 # these functions allow Paola & Julien to run code locally with their own path definitions
 def getDataDir(x):
     return {
+        'csclprd3s1.csmc.edu': '/home/duboisjx/scratch/data/HCP/MRI',
         'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/HCP/MRI',
         'sculpin.caltech.edu': '/data/jdubois/data/HCP/MRI',
-    }.get(x, '/data/jdubois/data/HCP/MRI')    # /media/paola/HCP is default if x not found
+    }.get(x, '/data/jdubois/data/HCP/MRI')    # default if x not found
 def getParcelDir(x):
     return {
+        'csclprd3s1.csmc.edu':'/home/duboisjx/scratch/data/parcellations/',
         'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
         'sculpin.caltech.edu': '/data/jdubois/data/parcellations/',
-    }.get(x, '/data/pgaldi/parcellations/')    # /home/paola/parcellations/ is default if x not found
+    }.get(x, '/data/pgaldi/parcellations/')    # default if x not found
 import socket
 HOST=socket.gethostname()
 DATADIR=getDataDir(HOST)
@@ -79,7 +81,7 @@ if config.queue: priority=-100
 if config.thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
 elif config.thisRun == 'rfMRI_REST2':
-    outMat = 'rest_1_mat'
+    outMat = 'rest_2_mat'
 else:
     sys.exit("Invalid run code")  
     
@@ -802,7 +804,7 @@ def TemporalFiltering(niiImg, flavor, masks, imgInfo):
         niiImg = clean(niiImg.T, detrend=False, standardize=False, 
                               t_r=TR, high_pass=flavor[1], low_pass=flavor[2]).T
     elif flavor[0] == 'Gaussian':
-        w = signal.gaussian(11,std=1)
+        w = signal.gaussian(11,std=flavor[1])
         niiImg = signal.lfilter(w,1,niiImg)
     elif flavor[0] == 'DCT':
         K = dctmtx(nTRs)
