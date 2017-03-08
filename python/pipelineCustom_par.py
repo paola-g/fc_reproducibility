@@ -79,6 +79,9 @@ for iSub in range(len(subjects)):
         elif config.parcellation=='Glasser_Aseg_Suit':
             fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+'_Atlas'+suffix+'.dtseries.nii')
             config.isCifti=1
+        elif config.parcellation=='Glasser_CIT168Amy_Aseg_Suit':
+            fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+'_Atlas'+suffix+'.dtseries.nii')
+            config.isCifti=1
         else:
             print 'Wrong parcellation code'
             exit()
@@ -145,6 +148,8 @@ if config.parcellation=='shenetal_neuroimage2013':
     nParcels = 268
 elif config.parcellation=='Glasser_Aseg_Suit':
     nParcels = 405
+elif config.parcellation=='Glasser_CIT168Amy_Aseg_Suit':
+    nParcels = 423
 for iSub in range(len(subjects)):
     if iSub not in excludeSub:
         tsFile_LR=op.join(ResultsDir,str(subjects[iSub])+'_'+config.thisRun+'_LR.txt')

@@ -53,12 +53,14 @@ class config(object):
 # these functions allow Paola & Julien to run code locally with their own path definitions
 def getDataDir(x):
     return {
+        'csclprd3s1.csmc.edu': '/home/duboisjx/scratch/data/HCP/MRI',
         'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/HCP/MRI',
         'sculpin.caltech.edu': '/data/jdubois/data/HCP/MRI',
     }.get(x, '/data/jdubois/data/HCP/MRI')    # /media/paola/HCP is default if x not found
 def getParcelDir(x):
     return {
-        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
+        'csclprd3s1.csmc.edu':'/home/duboisjx/scratch/data/parcellations/',
+	'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
         'sculpin.caltech.edu': '/data/jdubois/data/parcellations/',
     }.get(x, '/data/pgaldi/parcellations/')    # /home/paola/parcellations/ is default if x not found
 import socket
@@ -79,7 +81,7 @@ if config.queue: priority=-100
 if config.thisRun == 'rfMRI_REST1':
     outMat = 'rest_1_mat'
 elif config.thisRun == 'rfMRI_REST2':
-    outMat = 'rest_1_mat'
+    outMat = 'rest_2_mat'
 else:
     sys.exit("Invalid run code")  
     
@@ -98,13 +100,13 @@ suffix = '_hp2000_clean' if config.isDataClean else ''
 # In[32]:
 
 Operations= [
-    ['VoxelNormalization',      1, ['zscore']],
-    ['Detrending',              2, ['legendre', 3, 'WMCSF']],
-    ['TissueRegression',        3, ['WMCSF']],
-    ['MotionRegression',        4, ['R dR']],
-    ['TemporalFiltering',       5, ['Gaussian', 1]],
-    ['Detrending',              6, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  7, []],
+    ['VoxelNormalization',      0, ['zscore']],
+    ['Detrending',              1, ['legendre', 3, 'WMCSF']],
+    ['TissueRegression',        2, ['WMCSF']],
+    ['MotionRegression',        3, ['R dR']],
+    ['TemporalFiltering',       0, ['Gaussian', 1]],
+    ['Detrending',              4, ['legendre', 3,'GM']],
+    ['GlobalSignalRegression',  5, []],
     ['Scrubbing',               0, ['FD', 0.2, 1]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
 ]
