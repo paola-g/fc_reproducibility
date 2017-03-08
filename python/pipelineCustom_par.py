@@ -76,6 +76,9 @@ for iSub in range(len(subjects)):
         if config.parcellation=='shenetal_neuroimage2013':
             fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
             config.isCifti=0
+        elif config.parcellation=='shenetal_neuroimage2013_new':
+            fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
+            config.isCifti=0
         elif config.parcellation=='Glasser_Aseg_Suit':
             fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+'_Atlas'+suffix+'.dtseries.nii')
             config.isCifti=1
@@ -145,6 +148,8 @@ print 'After discarding high movers: corr(IQ,motion) = {:.3f} (p = {:.3f})'.form
 
 print 'Computing correlation matrices...'
 if config.parcellation=='shenetal_neuroimage2013':
+    nParcels = 268
+if config.parcellation=='shenetal_neuroimage2013_new':
     nParcels = 268
 elif config.parcellation=='Glasser_Aseg_Suit':
     nParcels = 405

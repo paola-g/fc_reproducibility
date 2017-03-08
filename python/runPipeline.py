@@ -7,10 +7,18 @@ def runPipeline(subject, fmriRun, fmriFile):
         uniqueParcels = range(268)
         config.isCifti = 0
         parcelVolume = 'fconn_atlas_150_2mm.nii'
+    elif config.parcellation=='shenetal_neuroimage2013_new':
+        uniqueParcels = range(268)
+        config.isCifti = 0
+        parcelVolume = 'shen_2mm_268_parcellation.nii.gz'
     elif config.parcellation=='Glasser_Aseg_Suit':
         config.isCifti = 1
         parcelVolume = 'Parcels.dlabel.nii'
         uniqueParcels = range(405)
+    elif config.parcellation=='Glasser_CIT168Amy_Aseg_Suit':
+        config.isCifti = 1
+        parcelVolume = 'Parcels.dlabel.nii'
+        uniqueParcels = range(423)
     else:
         print "Invalid parcellation code"
         return
