@@ -1,3 +1,48 @@
+### Pipeline Operations
+<ul> 
+<li>Voxel Normalization
+  <ul>
+  <li> zscore: Convert each voxel’s time course to z-score (remove mean, divide by std)
+  <li> pcSigCh: Convert each voxel’s time course to % signal change (remove mean, divide by mean, multiply by 100)
+  </ul>
+<li> Pre-whitening (True or False) 
+<li>Spatial Smoothing
+  <ul>
+  <li> Gaussian (specify FWHM): Isotropic gaussian smoothing with a given full-width at half maximum
+  <li> GaussianGM (specify FWHM): Tissue constrained isotropic gaussian smoothing (limited to gray matter mask) 
+  </ul>
+<li> Detrending
+  <ul>
+    <li> poly (specify order and tissue, one of 'WMCSF' or 'GM'): Polynomial regressors up to specified order
+    <li> legendre (specify order and tissue, one of 'WMCSF' or 'GM'): Legendre polynomials up to specified order
+  </ul>
+ <li> MotionRegression (Note: R = [X Y Z pitch yaw roll])
+  <ul> 
+  <li> R
+  <li> R dR
+  <li> R R^2
+  <li> R R^2 R-1 R-1^2
+  <li> R R^2 R-1 R-1^2 R-2 R-2^2
+  </ul>
+<li> Scrubbing
+  <ul>
+  <li> DVARS (specify threshold and number of adjacent volumes to exclude)
+  <li> FD (specify threshold and number of adjacent volumes to exclude)
+  </ul>
+<li> Tissue Regression
+  <ul>
+  <li> WMCSF
+  <li> WMCSF+dt
+  <li> CompCor (specify no. components)
+  </ul>
+<li> Global Signal Regression
+<li> Temporal Filtering
+  <ul>
+  <li> Butter (specify high and low pass threshold): Butterworth band pass filtering
+  <li> Gaussian (specify standard deviation): Low pass Gaussian smoothing
+  <li> DCT (specify high and low pass threshold): Discrete Cosine Transform, performed as regression 
+  </ul>
+</ul>
 ### Current version 
 Custom pipeline for fMRI preprocessing.<br>
 Files:
