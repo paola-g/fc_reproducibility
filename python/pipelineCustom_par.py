@@ -51,7 +51,6 @@ PEdirs = ['LR', 'RL']
 RelRMSMean = np.zeros([len(subjects), 2])
 excludeSub = list()
 joblist = []
-config.logfile = op.join(ResultsDir,'log_{}_HCP_{}.txt'.format(config.thisRun,config.release))
 for iSub in range(len(subjects)):
     subject = str(subjects[iSub])
     RelRMSMeanFile = op.join(buildpath(subject, config.thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
@@ -103,6 +102,7 @@ for iSub in range(len(subjects)):
                 thispythonfn += 'from runPipeline import *\n'
                 thispythonfn += 'config.subject = "{}"\n'.format(subject)
                 thispythonfn += 'config.fmriRun = "{}"\n'.format(fmriRun)
+                thispythonfn += 'config.logfile = "{}"\n'.format(op.join(ResultsDir,'log_{}_HCP_{}.txt'.format(config.thisRun,config.release)))
 		thispythonfn += 'runPipeline("{}","{}","{}")\nEND\n'.format(subject,fmriRun,fmriFile)
                 jobName = 's{}_{}_{}_{}'.format(subjects[iSub],config.thisRun,PEdir, config.pipelineName)
                 # prepare a script
@@ -117,6 +117,7 @@ for iSub in range(len(subjects)):
                 JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=19G'.format(priority))
                 joblist.append(JobID)
             else:
+		config.logfile = op.join(ResultsDir,'log_{}_HCP_{}.txt'.format(config.thisRun,config.release))
 		config.subject = subject
 		config.fmriRun = fmriRun
                 runPipeline(subject, fmriRun, fmriFile)

@@ -86,6 +86,9 @@ def runPipeline(subject, fmriRun, fmriFile):
         newimg = nib.Nifti1Image(niiimg, affine)
         nib.save(newimg,op.join(buildpath(subject,fmriRun),outFile+'.nii.gz'))
         del niiimg 
+    f=open(config.logfile, "a+")
+    f.write('{},{},{}\n'.format(subject,fmriRun,outFile))
+    f.close()
 
     timeEnd = localtime()  
 
