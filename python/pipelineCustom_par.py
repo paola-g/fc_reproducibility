@@ -51,6 +51,7 @@ PEdirs = ['LR', 'RL']
 RelRMSMean = np.zeros([len(subjects), 2])
 excludeSub = list()
 joblist = []
+config.logfile = op.join(ResultsDir,'log_{}_HCP_{}.txt'.format(config.thisRun,config.release))
 for iSub in range(len(subjects)):
     subject = str(subjects[iSub])
     RelRMSMeanFile = op.join(buildpath(subject, config.thisRun+'_zz'), 'Movement_RelativeRMS_mean.txt')
@@ -113,9 +114,11 @@ for iSub in range(len(subjects)):
                 cmd='chmod 774 '+thisScript
                 call(cmd,shell=True)
                 # call to fnSubmitToCluster
-                JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=20G'.format(priority))
+                JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=19G'.format(priority))
                 joblist.append(JobID)
             else:
+		config.subject = subject
+		config.fmriRun = fmriRun
                 runPipeline(subject, fmriRun, fmriFile)
         else:
             print subjects[iSub], ' : ', PEdir, 'results already computed; skipping'

@@ -105,7 +105,7 @@ def runPipeline(subject, fmriRun, fmriFile):
             parcelMaskFile = op.join(PARCELDIR,config.parcellation,'parcel{:03d}.nii.gz'.format(iParcel+1))
             if not op.isfile(parcelMaskFile) or config.overwrite:
                 print 'Making a binary volume mask for each parcel'
-                mymaths1 = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, config.parcellation,'shen_2mm_268_parcellation.nii.gz'),\
+                mymaths1 = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, config.parcellation,parcelVolume),\
                     out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel+1-0.1, iParcel+1+0.1)) 
                 mymaths1.run()
     if not op.isfile(fmriFile):
@@ -115,10 +115,6 @@ def runPipeline(subject, fmriRun, fmriFile):
     tsDir = op.join(buildpath(subject,fmriRun),config.parcellation)
     if not op.isdir(tsDir): mkdir(tsDir)
     alltsFile = op.join(ResultsDir,subject+'_'+fmriRun+'.txt')
-    #masker = NiftiLabelsMasker(labels_img=op.join(PARCELDIR, config.parcellation,'fconn_atlas_150_2mm.nii'))
-    #time_series = masker.fit_transform(op.join(buildpath(subject,fmriRun), outFile+'.nii.gz'))
-    #print time_series.shape
-    #np.savetxt('mytimeseries.txt', time_series)
     if not (op.isfile(alltsFile)) or config.overwrite:            
         # calculate signal in each of the nodes by averaging across all voxels/grayordinates in node
         print 'Extracting mean data from',str(len(uniqueParcels)),'parcels for ',outFile
@@ -143,6 +139,6 @@ def runPipeline(subject, fmriRun, fmriFile):
                 
     # concatenate all ts
     print 'Concatenating data'
-    cmd = 'paste '+op.join(tsDir,'parcel*.txt')+' > '+alltsFile
+    cmd = 'paste '+op.join(tsDir,'parcel???.txt')+' > '+alltsFile
     call(cmd, shell=True)
     return outFile

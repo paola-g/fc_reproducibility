@@ -38,9 +38,9 @@ class config(object):
     behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
     release = 'Q2'
     outScore = 'PMAT24_A_CR'
-    pipelineName = 'Finn_Q2_R1'
-    parcellation = 'shenetal_neuroimage2013'
-    overwrite = False
+    pipelineName = 'Finn_Q2_R1_new'
+    parcellation = 'shenetal_neuroimage2013_new'
+    overwrite = True
     thisRun = 'rfMRI_REST1'
     isDataClean = False
     doPlot = False
@@ -56,13 +56,13 @@ def getDataDir(x):
         'csclprd3s1.csmc.edu': '/home/duboisjx/scratch/data/HCP/MRI',
         'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/HCP/MRI',
         'sculpin.caltech.edu': '/data/jdubois/data/HCP/MRI',
-    }.get(x, '/data/jdubois/data/HCP/MRI')    # /media/paola/HCP is default if x not found
+    }.get(x, '/data/jdubois/data/HCP/MRI')    # default if x not found
 def getParcelDir(x):
     return {
         'csclprd3s1.csmc.edu':'/home/duboisjx/scratch/data/parcellations/',
-	'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
+        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
         'sculpin.caltech.edu': '/data/jdubois/data/parcellations/',
-    }.get(x, '/data/pgaldi/parcellations/')    # /home/paola/parcellations/ is default if x not found
+    }.get(x, '/data/pgaldi/parcellations/')    # default if x not found
 import socket
 HOST=socket.gethostname()
 DATADIR=getDataDir(HOST)
@@ -100,13 +100,13 @@ suffix = '_hp2000_clean' if config.isDataClean else ''
 # In[32]:
 
 Operations= [
-    ['VoxelNormalization',      0, ['zscore']],
-    ['Detrending',              1, ['legendre', 3, 'WMCSF']],
-    ['TissueRegression',        2, ['WMCSF']],
-    ['MotionRegression',        3, ['R dR']],
-    ['TemporalFiltering',       0, ['Gaussian', 1]],
-    ['Detrending',              4, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  5, []],
+    ['VoxelNormalization',      1, ['zscore']],
+    ['Detrending',              2, ['legendre', 3, 'WMCSF']],
+    ['TissueRegression',        3, ['WMCSF']],
+    ['MotionRegression',        4, ['R dR']],
+    ['TemporalFiltering',       5, ['Gaussian', 1]],
+    ['Detrending',              6, ['legendre', 3,'GM']],
+    ['GlobalSignalRegression',  7, []],
     ['Scrubbing',               0, ['FD', 0.2, 1]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
 ]
@@ -804,7 +804,7 @@ def TemporalFiltering(niiImg, flavor, masks, imgInfo):
         niiImg = clean(niiImg.T, detrend=False, standardize=False, 
                               t_r=TR, high_pass=flavor[1], low_pass=flavor[2]).T
     elif flavor[0] == 'Gaussian':
-        w = signal.gaussian(11,std=1)
+        w = signal.gaussian(11,std=flavor[1])
         niiImg = signal.lfilter(w,1,niiImg)
     elif flavor[0] == 'DCT':
         K = dctmtx(nTRs)
