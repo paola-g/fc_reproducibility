@@ -33,8 +33,6 @@ from scipy.fftpack import fft, dct
 
 # In[84]:
 class config(object):
-    filtering = []
-    doScrubbing = False
     behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
     release = 'Q2'
     outScore = 'PMAT24_A_CR'
@@ -87,6 +85,9 @@ else:
     
 suffix = '_hp2000_clean' if config.isDataClean else ''   
 
+# these variables are initialized here and used later in the pipeline, do not change
+config.filtering = []
+config.doScrubbing = False
 
 
 # ### Pipeline definition
