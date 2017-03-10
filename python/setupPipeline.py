@@ -28,7 +28,7 @@ import random
 import xml.etree.cElementTree as ET
 from time import localtime, strftime, sleep
 from scipy.fftpack import fft, dct
-
+import socket
 # ### Parameters
 
 # In[84]:
@@ -43,9 +43,6 @@ class config(object):
     isDataClean = False
     doPlot = False
     queue = True
-    isCifti = False
-    keepMean = False
-    preWhitening = False
 
 
 # these functions allow Paola & Julien to run code locally with their own path definitions
@@ -61,7 +58,6 @@ def getParcelDir(x):
         'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
         'sculpin.caltech.edu': '/data/jdubois/data/parcellations/',
     }.get(x, '/data/pgaldi/parcellations/')    # default if x not found
-import socket
 HOST=socket.gethostname()
 DATADIR=getDataDir(HOST)
 PARCELDIR=getParcelDir(HOST)
@@ -69,25 +65,8 @@ PARCELDIR=getParcelDir(HOST)
 # customize path to get access to single runs
 def buildpath(subject,fmriRun):
     return op.join(DATADIR, subject,'MNINonLinear','Results',fmriRun)
-    #return 'test'
 
-#DATADIR = '/media/paola/HCP/'
-#PARCELDIR = '/home/paola/parcellations'
 
-if config.queue: priority=-100
-
-if config.thisRun == 'rfMRI_REST1':
-    outMat = 'rest_1_mat'
-elif config.thisRun == 'rfMRI_REST2':
-    outMat = 'rest_2_mat'
-else:
-    sys.exit("Invalid run code")  
-    
-suffix = '_hp2000_clean' if config.isDataClean else ''   
-
-# these variables are initialized here and used later in the pipeline, do not change
-config.filtering = []
-config.doScrubbing = False
 
 
 # ### Pipeline definition
@@ -96,9 +75,14 @@ config.doScrubbing = False
 # 
 # The struct <b>Operations</b> encodes the order of generic pipeline steps, with 0 for skipping an operation, and otherwise a number indicating when the operation should be performed. Note that several operations may have the same position (e.g., motion regression and tissue regression may both have order = 3, which means they should be performed in the same regression). For each operation an array encodes the flavor of each step and parameters when needed.
 
+# Variable config.preWhitening controls if pre-whitening should performed at each regression step.
+
 # #### Finn's pipeline
 
 # In[32]:
+
+# if set to True, pre-whitening is performed at each regression step
+config.preWhitening = False
 
 Operations= [
     ['VoxelNormalization',      1, ['zscore']],
@@ -118,6 +102,21 @@ Operations= [
 
 # In[95]:
 
+if config.queue: priority=-100
+
+if config.thisRun == 'rfMRI_REST1':
+    outMat = 'rest_1_mat'
+elif config.thisRun == 'rfMRI_REST2':
+    outMat = 'rest_2_mat'
+else:
+    sys.exit("Invalid run code")  
+    
+suffix = '_hp2000_clean' if config.isDataClean else ''   
+
+# these variables are initialized here and used later in the pipeline, do not change
+config.filtering = []
+config.doScrubbing = False
+
 # regressors: to filter, no. time points x no. regressors
 def filter_regressors(regressors, filtering, nTRs, TR):
     if len(filtering)==0:
@@ -131,7 +130,7 @@ def filter_regressors(regressors, filtering, nTRs, TR):
             regressors = signal.lfilter(w,1,regressors, axis=0)  
     return regressors
     
-def regress(niiImg, nTRs, TR, regressors, keepMean=False, preWhitening=False):
+def regress(niiImg, nTRs, TR, regressors, preWhitening=False):
     if preWhitening:
         W = prewhitening(niiImg, nTRs, TR, regressors)
         niiImg = np.dot(niiImg,W)
@@ -142,10 +141,7 @@ def regress(niiImg, nTRs, TR, regressors, keepMean=False, preWhitening=False):
         fit = np.linalg.lstsq(X, niiImg[i,:].T)[0]
         fittedvalues = np.dot(X, fit)
         resid = niiImg[i,:] - np.ravel(fittedvalues)
-        if keepMean:
-            niiImg[i,:] = X[:,0]*fit[0] + resid
-        else:
-            niiImg[i,:] = resid
+        niiImg[i,:] = resid
     return niiImg 
 
 def normalize(niiImg,flavor):
@@ -693,7 +689,7 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         
     if flavor[0] == 'CompCor':
         X = extract_noise_components(niiImg, maskWM_, maskCSF_, num_components=flavor[1])
-        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.keepMean, config.preWhitening)
+        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.preWhitening)
     elif flavor[0] == 'WMCSF':
         meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
@@ -702,7 +698,7 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         meanCSF = meanCSF - np.mean(meanCSF)
         meanCSF = meanCSF/max(meanCSF)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
-        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.keepMean, config.preWhitening)
+        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.preWhitening)
     elif flavor[0] == 'WMCSF+dt':
         meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
@@ -716,7 +712,7 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         dtCSF[1:] = np.diff(meanCSF, n=1)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis], 
                              dtWM[:,np.newaxis], dtCSF[:,np.newaxis]), axis=1)
-        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.keepMean, config.preWhitening)
+        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.preWhitening)
     else:
 	print 'Warning! Wrong tissue regression flavor. Nothing was done.' 
     if not config.isCifti:
@@ -733,7 +729,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
         niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:]    
         if flavor[0] == 'legendre':
             y = legendre_poly(flavor[1],nTRs)
-            niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y.T, config.keepMean, config.preWhitening)
+            niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y.T, config.preWhitening)
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
             nPoly = flavor[1] + 1
@@ -742,7 +738,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
                 y[i,:] = y[i,:] - np.mean(y[i,:])
                 y[i,:] = y[i,:]/np.max(y[i,:]) 
-            niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y.T, config.keepMean, config.preWhitening)
+            niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y.T, config.preWhitening)
         else:
             print 'Warning! Wrong detrend flavor. Nothing was done'    
         niiImg[np.logical_or(maskWM_,maskCSF_),:] = niiImgWMCSF
@@ -754,7 +750,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
 
         if flavor[0] == 'legendre':
             y = legendre_poly(flavor[1], nTRs)
-            niiImgGM = regress(niiImgGM, nTRs, TR, y.T, config.keepMean, config.preWhitening)
+            niiImgGM = regress(niiImgGM, nTRs, TR, y.T, config.preWhitening)
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
             nPoly = flavor[1] + 1
@@ -763,7 +759,7 @@ def Detrending(niiImg, flavor, masks, imgInfo):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
                 y[i,:] = y[i,:] - np.mean(y[i,:])
                 y[i,:] = y[i,:]/np.max(y[i,:])
-                niiImgGM = regress(niiImgGM, nTRs, TR, y.T, config.keepMean, config.preWhitening)
+                niiImgGM = regress(niiImgGM, nTRs, TR, y.T, config.preWhitening)
         else:
             print 'Warning! Wrong detrend flavor. Nothing was done'
 

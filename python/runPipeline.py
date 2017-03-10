@@ -43,7 +43,7 @@ def runPipeline(subject, fmriRun, fmriFile):
                     niiImg = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
                 else:
                     r0 = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
-                    niiImg = regress(niiImg, nTRs, TR, r0, config.keepMean, config.preWhitening)
+                    niiImg = regress(niiImg, nTRs, TR, r0, config.preWhitening)
             else:
                 niiImg = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
         else:
@@ -61,7 +61,7 @@ def runPipeline(subject, fmriRun, fmriFile):
                 else:
                     niiImg = Hooks[opr](niiImg, Flavors[i][j], masks, imgInfo[1:])
             if r.shape[1] > 0:
-                niiImg = regress(niiImg, nTRs, TR, r, config.keepMean, config.preWhitening)    
+                niiImg = regress(niiImg, nTRs, TR, r, config.preWhitening)    
         niiImg[np.isnan(niiImg)] = 0
 
     print 'Done! Copy the resulting file...'
@@ -86,6 +86,9 @@ def runPipeline(subject, fmriRun, fmriFile):
         newimg = nib.Nifti1Image(niiimg, affine)
         nib.save(newimg,op.join(buildpath(subject,fmriRun),outFile+'.nii.gz'))
         del niiimg 
+        cmd = 'rm {}'.format(op.join(buildpath(subject, fmriRun), fmriRun+'.nii'))
+        call(cmd, shell=True)
+
     f=open(config.logfile, "a+")
     f.write('{},{},{}\n'.format(subject,fmriRun,outFile))
     f.close()
