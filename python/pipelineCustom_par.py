@@ -25,7 +25,8 @@ df.index = range(df.shape[0])
 print 'Selected', str(df.shape[0]), 'from the release',config.release
 print 'Number of males is:', df[df['Gender']=='M'].shape[0]
 tmpAgeRanges = sorted(df['Age'].unique())
-print 'Age range is', tmpAgeRanges[0].split('-')[0], '-', tmpAgeRanges[-1].split('-')[1]
+try: print 'Age range is', tmpAgeRanges[0].split('-')[0], '-', tmpAgeRanges[-1].split('-')[1]
+except Exception as e: print 'Age range is', tmpAgeRanges[0].split('-')[0], '-', tmpAgeRanges[-1]
 
 # list of all selected subjects
 subjects = df['Subject']

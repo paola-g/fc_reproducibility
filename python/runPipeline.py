@@ -1,6 +1,8 @@
 from setupPipeline import *
 def runPipeline(subject, fmriRun, fmriFile):
-    
+    if not op.isfile(fmriFile):
+        print fmriFile, 'does not exist'
+        return
     timeStart = localtime()
     
     if config.parcellation=='shenetal_neuroimage2013':
@@ -25,7 +27,7 @@ def runPipeline(subject, fmriRun, fmriFile):
 
     print 'Step 0'
     print 'Building WM, CSF and GM masks...'
-    masks = makeTissueMasks(subject,fmriRun,config.overwrite)
+    masks = makeTissueMasks(subject,fmriRun,False)
     maskAll, maskWM_, maskCSF_, maskGM_ = masks
 
     print 'Loading data in memory...'
@@ -85,13 +87,11 @@ def runPipeline(subject, fmriRun, fmriFile):
         niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
         newimg = nib.Nifti1Image(niiimg, affine)
         nib.save(newimg,op.join(buildpath(subject,fmriRun),outFile+'.nii.gz'))
-        del niiimg 
-        cmd = 'rm {}'.format(op.join(buildpath(subject, fmriRun), fmriRun+'.nii'))
-        call(cmd, shell=True)
 
-    f=open(config.logfile, "a+")
-    f.write('{},{},{}\n'.format(subject,fmriRun,outFile))
-    f.close()
+    if hasattr(config, 'logfile'):
+        f=open(config.logfile, "a+")
+        f.write('{},{},{}\n'.format(subject,fmriRun,outFile))
+        f.close()
 
     timeEnd = localtime()  
 
@@ -106,45 +106,54 @@ def runPipeline(subject, fmriRun, fmriFile):
     ResultsDir = op.join(ResultsDir,config.parcellation)
     if not op.isdir(ResultsDir): mkdir(ResultsDir)
     
-    for iParcel in uniqueParcels:
-        if not config.isCifti:
-            parcelMaskFile = op.join(PARCELDIR,config.parcellation,'parcel{:03d}.nii.gz'.format(iParcel+1))
-            if not op.isfile(parcelMaskFile) or config.overwrite:
-                print 'Making a binary volume mask for each parcel'
-                mymaths1 = fsl.maths.MathsCommand(in_file=op.join(PARCELDIR, config.parcellation,parcelVolume),\
-                    out_file=parcelMaskFile, args='-thr {:.1f} -uthr {:.1f}'.format(iParcel+1-0.1, iParcel+1+0.1)) 
-                mymaths1.run()
-    if not op.isfile(fmriFile):
-        print fmriFile, 'does not exist'
-        return
-    
     tsDir = op.join(buildpath(subject,fmriRun),config.parcellation)
     if not op.isdir(tsDir): mkdir(tsDir)
     alltsFile = op.join(ResultsDir,subject+'_'+fmriRun+'.txt')
+    
     if not (op.isfile(alltsFile)) or config.overwrite:            
         # calculate signal in each of the nodes by averaging across all voxels/grayordinates in node
         print 'Extracting mean data from',str(len(uniqueParcels)),'parcels for ',outFile
+        
+        if not config.isCifti:
+            with open(op.join(PARCELDIR, config.parcellation, parcelVolume), 'rb') as fFile:
+                decompressedFile = gzip.GzipFile(fileobj=fFile)
+                outFilePath = op.join(PARCELDIR, config.parcellation, 'temp_parcellation.nii')
+                with open(outFilePath, 'wb') as outfile:
+                    outfile.write(decompressedFile.read())
+            tmpnii = nib.load(outFilePath)
+            myoffset = tmpnii.dataobj.offset
+            tdata = np.memmap(outFilePath, dtype=tmpnii.header.get_data_dtype(), mode='r', order='F',
+                             offset=myoffset,shape=tmpnii.header.get_data_shape())
+            tRows, tCols, tSlices = tmpnii.header.get_data_shape()
+            allparcels = np.uint16(np.reshape(tdata,tRows*tCols*tSlices, order='F'))
+            del tdata
+            fmriPrepro = np.reshape(niiimg, (nRows*nCols*nSlices, nTRs), order='F')
+            del niiimg
+            
+        else:    
+            cmd = 'wb_command -cifti-convert -to-text {} {}'.format(op.join(PARCELDIR,parcellation,parcelVolume),
+                                                                   op.join(PARCELDIR,parcellation,parcelVolume).replace('.dlabel.nii','.tsv'))
+            call(cmd, shell=True)
+            allparcels = np.loadtxt(op.join(PARCELDIR,parcellation,parcelVolume).replace('.dlabel.nii','.tsv'));
+            cmd = 'wb_command -cifti-convert -to-text {} {}'.format(op.join(buildpath(subject,fmriRun),outFile+'.dtseries.nii'),
+                                                                   op.join(buildpath(subject,fmriRun),outFile+'.tsv'))
+            call(cmd, shell=True)
+            fmriPrepro = np.loadtxt(op.join(buildpath(subject,fmriRun),outFile+'.tsv'));
+                
+       
         for iParcel in uniqueParcels:
             tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel+1))
             if not op.isfile(tsFile) or config.overwrite:
-                if not config.isCifti:
-                    parcelMaskFile = op.join(PARCELDIR,config.parcellation,'parcel{:03d}.nii.gz'.format(iParcel+1))
-                    
-                    # simply average the voxels within the mask
-                    meants1 = fsl.ImageMeants(in_file=op.join(buildpath(subject,fmriRun), outFile+'.nii.gz'), out_file=tsFile, mask=parcelMaskFile)
-                    meants1.run()
-                else:
-                    # extract data in the parcel
-                    parcelMaskFile = op.join(PARCELDIR,config.parcellation,'parcel{:03d}.dscalar.nii'.format(iParcel+1))
-                    cmd = 'wb_command -cifti-label-to-roi {} {} -key {}'.format(
-                        op.joinpath(PARCELDIR,config.parcellation,parcelVolume), parcelMaskFile,iParcel+1)
-                    call(cmd,shell=True)
-                    cmd = 'wb_command -cifti-roi-average {} {} -cifti-roi {}'.format(
-                        op.join(buildpath(subject,fmriRun), outFile+'.nii.gz'),tsFile, parcelMaskFile)
+                np.savetxt(tsFile,np.nanmean(fmriPrepro[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.6f',delimiter='\n')
                 
-                
-    # concatenate all ts
-    print 'Concatenating data'
-    cmd = 'paste '+op.join(tsDir,'parcel???.txt')+' > '+alltsFile
-    call(cmd, shell=True)
-    return outFile
+        # concatenate all ts
+        print 'Concatenating data'
+        cmd = 'paste '+op.join(tsDir,'parcel???.txt')+' > '+alltsFile
+        call(cmd, shell=True)
+        
+        # delete decompressed input files
+        cmd = 'rm {}'.format(op.join(buildpath(subject, fmriRun), fmriRun+'.nii'))
+        call(cmd, shell=True)
+        cmd = 'rm {}'.format(outFilePath, fmriRun+'.nii')
+        call(cmd, shell=True)                            
+        del fmriPrepro
