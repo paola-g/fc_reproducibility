@@ -38,8 +38,8 @@ class config(object):
     outScore = 'PMAT24_A_CR'
     pipelineName = 'Finn_Q2_R1_new'
     parcellation = 'shenetal_neuroimage2013_new'
-    overwrite = True
-    thisRun = 'rfMRI_REST1'
+    overwrite = False
+    thisRun = 'rfMRI_REST2'
     isDataClean = False
     doPlot = False
     queue = True
@@ -190,7 +190,7 @@ def load_img(fmriFile, maskAll):
 
     img = nib.load(volFile)
     
-    myoffset = img.header.sizeof_hdr + 4 + img.header.get_data_offset()
+    myoffset = img.dataobj.offset
     data = np.memmap(volFile, dtype=img.header.get_data_dtype(), mode='c', order='F',
                      offset=myoffset,shape=img.header.get_data_shape())
 
@@ -293,20 +293,20 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         
         
     tmpnii = nib.load(WMmaskFileout)
-    myoffset = tmpnii.header.sizeof_hdr + 4 + tmpnii.header.get_data_offset()
+    myoffset = tmpnii.dataobj.offset
     data = np.memmap(WMmaskFileout, dtype=tmpnii.header.get_data_dtype(), mode='r', order='F',
                      offset=myoffset,shape=tmpnii.header.get_data_shape())
     nRows, nCols, nSlices = tmpnii.header.get_data_shape()
     maskWM = np.reshape(data > 0,nRows*nCols*nSlices, order='F')
     del data
     tmpnii = nib.load(CSFmaskFileout)
-    myoffset = tmpnii.header.sizeof_hdr + 4 + tmpnii.header.get_data_offset()
+    myoffset = tmpnii.dataobj.offset
     data = np.memmap(CSFmaskFileout, dtype=tmpnii.header.get_data_dtype(), mode='r', order='F', 
                      offset=myoffset,shape=tmpnii.header.get_data_shape())
     maskCSF = np.reshape(data > 0,nRows*nCols*nSlices, order='F')
     del data
     tmpnii = nib.load(GMmaskFileout)
-    myoffset = tmpnii.header.sizeof_hdr + 4 + tmpnii.header.get_data_offset()
+    myoffset = tmpnii.dataobj.offset
     data = np.memmap(GMmaskFileout, dtype=tmpnii.header.get_data_dtype(), mode='r', order='F', 
                      offset=myoffset,shape=tmpnii.header.get_data_shape())
     maskGM = np.reshape(data > 0,nRows*nCols*nSlices, order='F')
