@@ -117,7 +117,7 @@ def runPipeline(subject, fmriRun, fmriFile):
         if not config.isCifti:
             with open(op.join(PARCELDIR, config.parcellation, parcelVolume), 'rb') as fFile:
                 decompressedFile = gzip.GzipFile(fileobj=fFile)
-                outFilePath = op.join(PARCELDIR, config.parcellation, 'temp_parcellation.nii')
+                outFilePath = op.join(tsDir, 'temp_parcellation.nii')
                 with open(outFilePath, 'wb') as outfile:
                     outfile.write(decompressedFile.read())
             tmpnii = nib.load(outFilePath)
