@@ -154,6 +154,6 @@ def runPipeline(subject, fmriRun, fmriFile):
         # delete decompressed input files
         cmd = 'rm {}'.format(op.join(buildpath(subject, fmriRun), fmriRun+'.nii'))
         call(cmd, shell=True)
-        cmd = 'rm {}'.format(outFilePath, fmriRun+'.nii')
+        cmd = 'rm {}'.format(op.join(tsDir, 'temp_parcellation.nii'))
         call(cmd, shell=True)                            
         del fmriPrepro

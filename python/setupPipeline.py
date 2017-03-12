@@ -34,7 +34,7 @@ import socket
 # In[84]:
 class config(object):
     behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
-    release = 'Q2'
+    release = 'S500'
     outScore = 'PMAT24_A_CR'
     pipelineName = 'Finn_Q2_R1_new'
     parcellation = 'shenetal_neuroimage2013_new'
@@ -829,6 +829,8 @@ def VoxelNormalization(niiImg, flavor, masks, imgInfo):
         return niiImg
     elif flavor[0] == 'pcSigCh':
         niiImg = 100 * (niiImg - np.mean(niiImg,axis=1)[:,np.newaxis]) / np.mean(niiImg,axis=1)[:,np.newaxis]
+    elif flavor[0] == 'demean':
+        niiImg = niiImg - niiImg.mean(1)[:,np.newaxis]
     else:
         print 'Warning! Wrong normalization flavor. Nothing was done'
     return niiImg  
