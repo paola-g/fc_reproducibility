@@ -7,7 +7,7 @@ import os.path as op
 from os import mkdir, makedirs, getcwd, remove
 import scipy.stats as stats
 import nipype.interfaces.fsl as fsl
-from subprocess import call, Popen, check_output, CalledProcessError
+from subprocess import call, check_output, CalledProcessError
 import nibabel as nib
 import scipy.io as sio
 from sklearn import cross_validation
