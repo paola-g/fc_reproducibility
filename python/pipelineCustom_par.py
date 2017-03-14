@@ -2,11 +2,11 @@ from runPipeline import *
 
 # ### Get subjects
 
-df = pd.read_csv(config.behavFile)
+df = pd.read_csv(op.join(DATADIR,'..','neuropsych',config.behavFile))
 
 # select subjects according to release
 if config.release == 'Q2':
-    ind = (df['Release'] == 'Q2')     | (df['Release'] == 'Q1')
+    ind = (df['Release'] == 'Q2') | (df['Release'] == 'Q1')
 elif config.release == 'S500':
     ind = (df['Release'] != 'Q2') & (df['Release'] != 'Q1')
 else:
@@ -115,7 +115,7 @@ for iSub in range(len(subjects)):
                 cmd='chmod 774 '+thisScript
                 call(cmd,shell=True)
                 # call to fnSubmitToCluster
-                JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=19G'.format(priority))
+                JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem=12G'.format(priority))
                 joblist.append(JobID)
             else:
 		config.logfile = op.join(ResultsDir,'log_{}_HCP_{}.txt'.format(config.thisRun,config.release))

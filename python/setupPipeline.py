@@ -33,34 +33,36 @@ import socket
 
 # In[84]:
 class config(object):
-    behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
-    release = 'S500'
-    outScore = 'PMAT24_A_CR'
+    behavFile    = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
+    release      = 'Q2'
+    outScore     = 'PMAT24_A_CR'
     pipelineName = 'Finn_Q2_R1_new'
     parcellation = 'shenetal_neuroimage2013_new'
-    overwrite = False
-    thisRun = 'rfMRI_REST2'
-    isDataClean = False
-    doPlot = False
-    queue = True
+    overwrite    = False
+    thisRun      = 'rfMRI_REST1'
+    isDataClean  = False
+    doPlot       = False
+    queue        = True
 
 
 # these functions allow Paola & Julien to run code locally with their own path definitions
 def getDataDir(x):
     return {
-        'csclprd3s1.csmc.edu': '/home/duboisjx/scratch/data/HCP/MRI',
-        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/HCP/MRI',
-        'sculpin.caltech.edu': '/data/jdubois/data/HCP/MRI',
+        'csclprd': '/home/duboisjx/scratch/data/HCP/MRI',
+        'esplmat': '/home/duboisjx/vault/data/HCP/MRI',
+        'sculpin': '/data/jdubois/data/HCP/MRI',
     }.get(x, '/data/jdubois/data/HCP/MRI')    # default if x not found
 def getParcelDir(x):
     return {
-        'csclprd3s1.csmc.edu':'/home/duboisjx/scratch/data/parcellations/',
-        'esplmatlabw02.csmc.edu': '/home/duboisjx/vault/data/parcellations/',
-        'sculpin.caltech.edu': '/data/jdubois/data/parcellations/',
+        'csclprd':'/home/duboisjx/scratch/data/parcellations/',
+        'esplmat': '/home/duboisjx/vault/data/parcellations/',
+        'sculpin': '/data/jdubois/data/parcellations/',
     }.get(x, '/data/pgaldi/parcellations/')    # default if x not found
 HOST=socket.gethostname()
-DATADIR=getDataDir(HOST)
-PARCELDIR=getParcelDir(HOST)
+DATADIR=getDataDir(HOST[0:7])
+PARCELDIR=getParcelDir(HOST[0:7])
+print DATADIR
+print HOST[0:7]
 
 # customize path to get access to single runs
 def buildpath(subject,fmriRun):
@@ -85,13 +87,13 @@ def buildpath(subject,fmriRun):
 config.preWhitening = False
 
 Operations= [
-    ['VoxelNormalization',      1, ['zscore']],
-    ['Detrending',              2, ['legendre', 3, 'WMCSF']],
-    ['TissueRegression',        3, ['WMCSF']],
-    ['MotionRegression',        4, ['R dR']],
-    ['TemporalFiltering',       5, ['Gaussian', 1]],
-    ['Detrending',              6, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  7, []],
+    ['VoxelNormalization',      0, ['zscore']],
+    ['Detrending',              1, ['legendre', 3, 'WMCSF']],
+    ['TissueRegression',        2, ['WMCSF']],
+    ['MotionRegression',        3, ['R dR']],
+    ['TemporalFiltering',       4, ['Gaussian', 1]],
+    ['Detrending',              5, ['legendre', 3,'GM']],
+    ['GlobalSignalRegression',  6, []],
     ['Scrubbing',               0, ['FD', 0.2, 1]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
 ]
@@ -225,8 +227,7 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         ribbonMat = op.join(buildpath(subject,fmriRun), 'ribbon_flirt.mat')
         wmparcMat = op.join(buildpath(subject,fmriRun), 'wmparc_flirt.mat')
         eyeMat = op.join(buildpath(subject,fmriRun), 'eye.mat')
-
-        with open('eye.mat','w') as fid:
+        with open(eyeMat,'w') as fid:
             fid.write('1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1')
         
         flirt_ribbon = fsl.FLIRT(in_file=ribbonFilein, out_file=ribbonFileout, 
