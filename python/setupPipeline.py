@@ -1,6 +1,5 @@
 from __future__ import division
 import matplotlib.pyplot as plt
-import csv
 import pandas as pd
 import sys
 import numpy as np
@@ -10,12 +9,10 @@ import scipy.stats as stats
 import nipype.interfaces.fsl as fsl
 from subprocess import call, Popen, check_output, CalledProcessError
 import nibabel as nib
-from shutil import copyfile, rmtree
 import scipy.io as sio
 from sklearn import cross_validation
 from sklearn import linear_model
 from numpy.polynomial.legendre import Legendre
-import shlex
 from scipy import signal
 import operator
 import gzip
@@ -27,7 +24,6 @@ import string
 import random
 import xml.etree.cElementTree as ET
 from time import localtime, strftime, sleep
-from scipy.fftpack import fft, dct
 import socket
 # ### Parameters
 
