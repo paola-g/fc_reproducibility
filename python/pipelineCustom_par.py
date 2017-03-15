@@ -2,7 +2,7 @@ from runPipeline import *
 
 # ### Get subjects
 
-df = pd.read_csv(op.join(DATADIR,'..','neuropsych',config.behavFile))
+df = pd.read_csv(config.behavFile)
 
 # select subjects according to release
 if config.release == 'Q2':

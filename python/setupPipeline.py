@@ -27,20 +27,6 @@ from time import localtime, strftime, sleep
 import socket
 # ### Parameters
 
-# In[84]:
-class config(object):
-    behavFile    = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
-    release      = 'Q2'
-    outScore     = 'PMAT24_A_CR'
-    pipelineName = 'Finn_Q2_R1_new'
-    parcellation = 'shenetal_neuroimage2013_new'
-    overwrite    = False
-    thisRun      = 'rfMRI_REST1'
-    isDataClean  = False
-    doPlot       = False
-    queue        = True
-
-
 # these functions allow Paola & Julien to run code locally with their own path definitions
 def getDataDir(x):
     return {
@@ -64,7 +50,17 @@ print HOST[0:7]
 def buildpath(subject,fmriRun):
     return op.join(DATADIR, subject,'MNINonLinear','Results',fmriRun)
 
-
+class config(object):
+    behavFile    = op.join(DATADIR,'..','neuropsych','unrestricted_luckydjuju_11_17_2015_0_47_11.csv')
+    release      = 'S500'
+    outScore     = 'PMAT24_A_CR'
+    pipelineName = 'Gordon'
+    parcellation = 'shenetal_neuroimage2013_new'
+    overwrite    = False
+    thisRun      = 'rfMRI_REST1'
+    isDataClean  = False
+    doPlot       = False
+    queue        = True
 
 
 # ### Pipeline definition
@@ -83,17 +79,16 @@ def buildpath(subject,fmriRun):
 config.preWhitening = False
 
 Operations= [
-    ['VoxelNormalization',      0, ['zscore']],
-    ['Detrending',              1, ['legendre', 3, 'WMCSF']],
-    ['TissueRegression',        2, ['WMCSF']],
+    ['VoxelNormalization',      1, ['zscore']],
+    ['Detrending',              2, ['poly', 1, 'wholebrain']],
+    ['TissueRegression',        3, ['WMCSF','wholebrain']],
     ['MotionRegression',        3, ['R dR']],
-    ['TemporalFiltering',       4, ['Gaussian', 1]],
-    ['Detrending',              5, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  6, []],
-    ['Scrubbing',               0, ['FD', 0.2, 1]],
+    ['TemporalFiltering',       4, ['Butter', 0.009, 0.08]],
+    ['Detrending',              0, ['legendre', 3,'GM']],
+    ['GlobalSignalRegression',  3, []],
+    ['Scrubbing',               5, ['FD', 0.2, 1]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
 ]
-
 
 
 # ### Utils
@@ -166,8 +161,6 @@ def legendre_poly(order, nTRs):
         if i>0:
             y[i,:] = y[i,:] - np.mean(y[i,:])
             y[i,:] = y[i,:]/np.max(y[i,:])
-        np.savetxt(op.join(buildpath(config.subject,config.fmriRun),
-                           'poly_detrend_legendre' + str(i) + '.txt'), y[i,:] ,fmt='%.4f')
     return y
 
 def load_img(fmriFile, maskAll):
@@ -686,7 +679,7 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         
     if flavor[0] == 'CompCor':
         X = extract_noise_components(niiImg, maskWM_, maskCSF_, num_components=flavor[1])
-        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.preWhitening)
+        
     elif flavor[0] == 'WMCSF':
         meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
@@ -695,7 +688,7 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         meanCSF = meanCSF - np.mean(meanCSF)
         meanCSF = meanCSF/max(meanCSF)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
-        niiImgGM = regress(niiImgGM, nTRs, TR, X, config.preWhitening)
+        
     elif flavor[0] == 'WMCSF+dt':
         meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
@@ -709,35 +702,45 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         dtCSF[1:] = np.diff(meanCSF, n=1)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis], 
                              dtWM[:,np.newaxis], dtCSF[:,np.newaxis]), axis=1)
+    else:
+        print 'Warning! Wrong tissue regression flavor. Nothing was done'
+    
+        
+    if flavor[1] == 'GM':
+        if config.isCifti:
+            niiImgGM = niiImg
+        else:
+            niiImgGM = niiImg[maskGM_,:]
         niiImgGM = regress(niiImgGM, nTRs, TR, X, config.preWhitening)
+        if not config.isCifti:
+            niiImg[maskGM_,:] = niiImgGM
+        else:
+            niiImg = niiImgGM
+        return niiImg
+    elif flavor[1] == 'wholebrain':
+        return X
     else:
-	print 'Warning! Wrong tissue regression flavor. Nothing was done.' 
-    if not config.isCifti:
-        niiImg[maskGM_,:] = niiImgGM
-    else:
-        niiImg = niiImgGM
-    return niiImg
+        print 'Warning! Wrong tissue regression flavor. Nothing was done'
 
 def Detrending(niiImg, flavor, masks, imgInfo):
     maskAll, maskWM_, maskCSF_, maskGM_ = masks
     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
 
+    nPoly = flavor[1] + 1
     if flavor[2] == 'WMCSF':
-        niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:]    
+        niiImgWMCSF = niiImg[np.logical_or(maskWM_,maskCSF_),:]
         if flavor[0] == 'legendre':
-            y = legendre_poly(flavor[1],nTRs)
-            niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y.T, config.preWhitening)
+            y = legendre_poly(flavor[1],nTRs)                
         elif flavor[0] == 'poly':       
-            x = np.arange(nTRs)
-            nPoly = flavor[1] + 1
+            x = np.arange(nTRs)            
             y = np.ones((nPoly,len(x)))
             for i in range(nPoly):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
                 y[i,:] = y[i,:] - np.mean(y[i,:])
                 y[i,:] = y[i,:]/np.max(y[i,:]) 
-            niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y.T, config.preWhitening)
         else:
-            print 'Warning! Wrong detrend flavor. Nothing was done'    
+            print 'Warning! Wrong detrend flavor. Nothing was done'
+        niiImgWMCSF = regress(niiImgWMCSF, nTRs, TR, y[1:nPoly,:].T, config.preWhitening)
         niiImg[np.logical_or(maskWM_,maskCSF_),:] = niiImgWMCSF
     elif flavor[2] == 'GM':
         if config.isCifti:
@@ -747,26 +750,34 @@ def Detrending(niiImg, flavor, masks, imgInfo):
 
         if flavor[0] == 'legendre':
             y = legendre_poly(flavor[1], nTRs)
-            niiImgGM = regress(niiImgGM, nTRs, TR, y.T, config.preWhitening)
         elif flavor[0] == 'poly':       
             x = np.arange(nTRs)
-            nPoly = flavor[1] + 1
             y = np.ones((nPoly,len(x)))
             for i in range(nPoly):
                 y[i,:] = (x - (np.max(x)/2)) **(i+1)
                 y[i,:] = y[i,:] - np.mean(y[i,:])
                 y[i,:] = y[i,:]/np.max(y[i,:])
-                niiImgGM = regress(niiImgGM, nTRs, TR, y.T, config.preWhitening)
-        else:
-            print 'Warning! Wrong detrend flavor. Nothing was done'
-
+        niiImgGM = regress(niiImgGM, nTRs, TR, y[1:nPoly,:].T, config.preWhitening)
         if not config.isCifti:
             niiImg[maskGM_,:] = niiImgGM
         else:
             niiImg = niiImgGM
+    elif flavor[2] == 'wholebrain':
+        if flavor[0] == 'legendre':
+            y = legendre_poly(flavor[1], nTRs)
+        elif flavor[0] == 'poly':       
+            x = np.arange(nTRs)
+            y = np.ones((nPoly,len(x)))
+            for i in range(nPoly):
+                y[i,:] = (x - (np.max(x)/2)) **(i+1)
+                y[i,:] = y[i,:] - np.mean(y[i,:])
+                y[i,:] = y[i,:]/np.max(y[i,:])        
+        else:
+            print 'Warning! Wrong detrend flavor. Nothing was done'
+        return y[1:nPoly,:].T    
     else:
         print 'Warning! Wrong detrend mask. Nothing was done' 
-    return niiImg     
+    return niiImg 
 
    
 
@@ -864,6 +875,7 @@ if scrub_idx != -1:
             opr[1] = opr[1]+1
 
     sortedOperations[curr_idx][1] = 1    
+    sortedOperations = sorted(Operations, key=operator.itemgetter(1))
 
 for opr in sortedOperations:
     if opr[1]==0:

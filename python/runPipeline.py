@@ -40,8 +40,8 @@ def runPipeline(subject, fmriRun, fmriFile):
         
         if len(step) == 1:
             # Atomic operations
-            if 'Regression' in step[0] or ('TemporalFiltering' in step[0] and 'DCT' in Flavors[i][0]):
-                if step[0]=='TissueRegression': #regression constrained to GM
+            if 'Regression' in step[0] or ('TemporalFiltering' in step[0] and 'DCT' in Flavors[i][0]) or ('wholebrain' in Flavors[i][0]):
+                if step[0]=='TissueRegression' and 'GM' in Flavors[i][0]: #regression constrained to GM
                     niiImg = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
                 else:
                     r0 = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
@@ -54,8 +54,8 @@ def runPipeline(subject, fmriRun, fmriFile):
             r = np.empty((nTRs, 0))
             for j in range(len(step)):
                 opr = step[j]
-                if 'Regression' in opr or ('TemporalFiltering' in opr and 'DCT' in Flavors[i][j]):
-                    if opr=='TissueRegression': #regression constrained to GM
+                if 'Regression' in opr or ('TemporalFiltering' in opr and 'DCT' in Flavors[i][j]) or ('wholebrain' in Flavors[i][j]):
+                    if opr=='TissueRegression' and 'GM' in Flavors[i][j]: #regression constrained to GM
                         niiImg = Hooks[opr](niiImg, Flavors[i][j], masks, imgInfo[1:])
                     else:    
                         r0 = Hooks[opr](niiImg, Flavors[i][j], masks, imgInfo[1:])
