@@ -142,13 +142,13 @@ def runPipeline(subject, fmriRun, fmriFile):
                 
        
         for iParcel in uniqueParcels:
-            tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel+1))
+            tsFile = op.join(tsDir,'parcel{:03d}_{}.txt'.format(iParcel+1,rstring))
             if not op.isfile(tsFile) or config.overwrite:
                 np.savetxt(tsFile,np.nanmean(fmriPrepro[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.6f',delimiter='\n')
                 
         # concatenate all ts
         print 'Concatenating data'
-        cmd = 'paste '+op.join(tsDir,'parcel???.txt')+' > '+alltsFile
+        cmd = 'paste '+op.join(tsDir,'parcel???_{}.txt'.format(rstring))+' > '+alltsFile
         call(cmd, shell=True)
         
         # delete decompressed input files
