@@ -54,9 +54,9 @@ class config(object):
     behavFile    = op.join(DATADIR,'..','neuropsych','unrestricted_luckydjuju_11_17_2015_0_47_11.csv')
     release      = 'S500'
     outScore     = 'PMAT24_A_CR'
-    pipelineName = 'Gordon'
+    pipelineName = 'Gordon2'
     parcellation = 'shenetal_neuroimage2013_new'
-    overwrite    = False
+    overwrite    = True
     thisRun      = 'rfMRI_REST1'
     isDataClean  = False
     doPlot       = False
@@ -79,14 +79,14 @@ class config(object):
 config.preWhitening = False
 
 Operations= [
-    ['VoxelNormalization',      1, ['zscore']],
+    ['VoxelNormalization',      1, ['demean']],
     ['Detrending',              2, ['poly', 1, 'wholebrain']],
     ['TissueRegression',        3, ['WMCSF','wholebrain']],
-    ['MotionRegression',        3, ['R dR']],
-    ['TemporalFiltering',       4, ['Butter', 0.009, 0.08]],
+    ['MotionRegression',        3, ['R R^2 R-1 R-1^2']],
+    ['TemporalFiltering',       3, ['DCT', 0.009, 0.08]],
     ['Detrending',              0, ['legendre', 3,'GM']],
     ['GlobalSignalRegression',  3, []],
-    ['Scrubbing',               5, ['FD', 0.2, 1]],
+    ['Scrubbing',               3, ['FD', 0.2]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
 ]
 
@@ -871,7 +871,7 @@ for opr in sortedOperations:
         
 if scrub_idx != -1:        
     for opr in sortedOperations:  
-        if opr[1] != 0 and opr[1] < scrub_idx:
+        if opr[1] != 0 and opr[1] <= scrub_idx:
             opr[1] = opr[1]+1
 
     sortedOperations[curr_idx][1] = 1    

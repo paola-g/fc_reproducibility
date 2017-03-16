@@ -36,7 +36,7 @@ def runPipeline(subject, fmriRun, fmriFile):
     nsteps = len(steps)
     for i in range(1,nsteps+1):
         step = steps[i]
-        print 'Step '+str(i)+' '+str(step[0])
+        print 'Step '+str(i)+' '+str(step)
         
         if len(step) == 1:
             # Atomic operations
