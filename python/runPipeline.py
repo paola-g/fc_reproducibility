@@ -108,11 +108,11 @@ def runPipeline(subject, fmriRun, fmriFile):
             call(cmd,shell=True)
             del niiImg
         else:
-            niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
+            niiimg = np.zeros((nRows*nCols*nSlices, nTRs),dtype=np.float32)
             niiimg[maskAll,:] = niiImg
             del niiImg
             niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
-            newimg = nib.Nifti1Image(niiimg, affine)
+            newimg = nib.Nifti1Image(niiimg.astype('<f4'), affine)
             nib.save(newimg,op.join(buildpath(subject,fmriRun),outFile+'.nii.gz'))
 
 

@@ -53,7 +53,7 @@ def buildpath(subject,fmriRun):
 
 class config(object):
     behavFile    = op.join(DATADIR,'..','neuropsych','unrestricted_luckydjuju_11_17_2015_0_47_11.csv')
-    release      = 'S500'
+    release      = 'Q2'
     outScore     = 'PMAT24_A_CR'
     pipelineName = 'Finn_Q2_R1_new'
     parcellation = 'shenetal_neuroimage2013_new'
@@ -98,9 +98,9 @@ Operations= [
     ['MotionRegression',        4, ['R dR']],
     ['TemporalFiltering',       5, ['Gaussian', 1]],
     ['Detrending',              6, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  7, []],
-    ['Scrubbing',               0, ['FD', 0.2, 1]],
-    ['SpatialSmoothing',        0, ['Gaussian', 6]],
+    ['GlobalSignalRegression',  7, ['GS']],
+    ['Scrubbing',               0, []],
+    ['SpatialSmoothing',        0, []],
 ]
 
 
@@ -278,15 +278,15 @@ def makeTissueMasks(subject,fmriRun,overwrite):
         # write masks
         ref = nib.load(wmparcFileout)
         WMmask = np.reshape(WMmask,ref.shape)
-        img = nib.Nifti1Image(WMmask, ref.affine)
+        img = nib.Nifti1Image(WMmask.astype('<f4'), ref.affine)
         nib.save(img, WMmaskFileout)
         
         CSFmask = np.reshape(CSFmask,ref.shape)
-        img = nib.Nifti1Image(CSFmask, ref.affine)
+        img = nib.Nifti1Image(CSFmask.astype('<f4'), ref.affine)
         nib.save(img, CSFmaskFileout)
         
         GMmask = np.reshape(GMmask,ref.shape)
-        img = nib.Nifti1Image(GMmask, ref.affine)
+        img = nib.Nifti1Image(GMmask.astype('<f4'), ref.affine)
         nib.save(img, GMmaskFileout)
 
         # delete temporary files
@@ -480,7 +480,7 @@ def scoreatpercentile(a, per, limit=(), interpolation_method='fraction'):
 def dctmtx(N):
     K=N
     n = range(N)
-    C = np.zeros((len(n), K))
+    C = np.zeros((len(n), K),dtype=np.float32)
     C[:,0] = np.ones((len(n)))/np.sqrt(N)
     doublen = [2*x+1 for x in n]
     for k in range(1,K):
@@ -535,7 +535,7 @@ def reml(sigma, components, design=None, n=1, niter=128,
     # initialise coefficient, gradient, Hessian
 
     Q = components
-    PQ = np.zeros(Q.shape)
+    PQ = np.zeros(Q.shape,dtype=np.float32)
     
     q = Q.shape[0]
     m = Q.shape[1]
@@ -550,10 +550,10 @@ def reml(sigma, components, design=None, n=1, niter=128,
 
     # gradient in Fisher algorithm
     
-    dFdh = np.zeros(q)
+    dFdh = np.zeros(q,dtype=np.float32)
 
     # Hessian in Fisher algorithm
-    dFdhh = np.zeros((q,q))
+    dFdhh = np.zeros((q,q),dtype=np.float32)
 
     # penalty terms
 
@@ -691,7 +691,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
     if config.doScrubbing:
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         toCensor = np.loadtxt(op.join(buildpath(config.subject,config.fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
-        toReg = np.zeros((nTRs, 1))
+        toReg = np.zeros((nTRs, 1),dtype=np.float32)
         toReg[toCensor] = 1
         X = np.concatenate((X, toReg), axis=1)
     return X
@@ -705,7 +705,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         niiImg2 = 100 * (niiImg - meanImg) / meanImg
         niiImg2[np.where(np.isnan(niiImg2))] = 0
         dt = np.diff(niiImg2, n=1, axis=1)
-        dt = np.concatenate((np.zeros((dt.shape[0],1)), dt), axis=1)
+        dt = np.concatenate((np.zeros((dt.shape[0],1),dtype=np.float32), dt), axis=1)
         score = np.sqrt(np.mean(dt**2,0))   
     elif flavor[0] == 'FD':
         motionFile = op.join(buildpath(config.subject,config.fmriRun), 'Movement_Regressors_dt.txt')
@@ -753,9 +753,9 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         meanCSF = np.mean(np.float64(niiImg[maskCSF_,:]),axis=0)
         meanCSF = meanCSF - np.mean(meanCSF)
         meanCSF = meanCSF/max(meanCSF)
-        dtWM=np.zeros(meanWM.shape)
+        dtWM=np.zeros(meanWM.shape,dtype=np.float32)
         dtWM[1:] = np.diff(meanWM, n=1)
-        dtCSF=np.zeros(meanCSF.shape)
+        dtCSF=np.zeros(meanCSF.shape,dtype=np.float32)
         dtCSF[1:] = np.diff(meanCSF, n=1)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis], 
                              dtWM[:,np.newaxis], dtCSF[:,np.newaxis]), axis=1)
@@ -766,9 +766,9 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         meanCSF = np.mean(np.float64(niiImg[maskCSF_,:]),axis=0)
         meanCSF = meanCSF - np.mean(meanCSF)
         meanCSF = meanCSF/max(meanCSF)
-        dtWM=np.zeros(meanWM.shape)
+        dtWM=np.zeros(meanWM.shape,dtype=np.float32)
         dtWM[1:] = np.diff(meanWM, n=1)
-        dtCSF=np.zeros(meanCSF.shape)
+        dtCSF=np.zeros(meanCSF.shape,dtype=np.float32)
         dtCSF[1:] = np.diff(meanCSF, n=1)
         sqmeanWM = meanWM ** 2
         sqmeanCSF = meanCSF ** 2
@@ -861,7 +861,7 @@ def SpatialSmoothing(niiImg, flavor, masks, imgInfo):
     maskAll, maskWM_, maskCSF_, maskGM_ = masks
     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
 
-    niiimg = np.zeros((nRows*nCols*nSlices, nTRs))
+    niiimg = np.zeros((nRows*nCols*nSlices, nTRs),dtype=np.float32)
     niiimg[maskAll,:] = niiImg
     niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
     newimg = nib.Nifti1Image(niiimg, affine)
@@ -908,12 +908,12 @@ def GlobalSignalRegression(niiImg, flavor, masks, imgInfo):
     if flavor[0] == 'GS':
         return meanAll[:,np.newaxis]
     elif flavor[0] == 'GS+dt':
-        dtGS=np.zeros(meanAll.shape)
+        dtGS=np.zeros(meanAll.shape,dtype=np.float32)
         dtGS[1:] = np.diff(meanAll, n=1)
         X  = np.concatenate((meanAll[:,np.newaxis], dtGS[:,np.newaxis]), axis=1)
         return X
     elif flavor[0] == 'GS+dt+sq':
-        dtGS = np.zeros(meanAll.shape)
+        dtGS = np.zeros(meanAll.shape,dtype=np.float32)
         dtGS[1:] = np.diff(meanAll, n=1)
         sqGS = meanAll ** 2
         sqdtGS = dtGS ** 2
