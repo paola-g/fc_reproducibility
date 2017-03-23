@@ -4,7 +4,7 @@ import pandas as pd
 import sys
 import numpy as np
 import os.path as op
-from os import mkdir, makedirs, getcwd, remove
+from os import mkdir, makedirs, getcwd, remove, listdir
 import scipy.stats as stats
 import nipype.interfaces.fsl as fsl
 from subprocess import call, check_output, CalledProcessError
@@ -25,6 +25,7 @@ import random
 import xml.etree.cElementTree as ET
 from time import localtime, strftime, sleep
 import socket
+import fnmatch
 # ### Parameters
 
 # these functions allow Paola & Julien to run code locally with their own path definitions
@@ -54,9 +55,9 @@ class config(object):
     behavFile    = op.join(DATADIR,'..','neuropsych','unrestricted_luckydjuju_11_17_2015_0_47_11.csv')
     release      = 'S500'
     outScore     = 'PMAT24_A_CR'
-    pipelineName = 'Gordon2'
+    pipelineName = 'Finn_Q2_R1_new'
     parcellation = 'shenetal_neuroimage2013_new'
-    overwrite    = True
+    overwrite    = False
     thisRun      = 'rfMRI_REST1'
     isDataClean  = False
     doPlot       = False
@@ -78,15 +79,27 @@ class config(object):
 # if set to True, pre-whitening is performed at each regression step
 config.preWhitening = False
 
+#Operations= [
+#    ['VoxelNormalization',      1, ['demean']],
+#    ['Detrending',              2, ['poly', 1, 'wholebrain']],
+#    ['TissueRegression',        3, ['WMCSF','wholebrain']],
+#    ['MotionRegression',        3, ['R R^2 R-1 R-1^2']],
+#    ['TemporalFiltering',       4, ['Butter', 0.009, 0.08]],
+#    ['Detrending',              0, ['legendre', 3,'GM']],
+#    ['GlobalSignalRegression',  3, []],
+#    ['Scrubbing',               5, ['FD', 0.2]],
+#    ['SpatialSmoothing',        0, ['Gaussian', 6]],
+#]
+
 Operations= [
-    ['VoxelNormalization',      1, ['demean']],
-    ['Detrending',              2, ['poly', 1, 'wholebrain']],
-    ['TissueRegression',        3, ['WMCSF','wholebrain']],
-    ['MotionRegression',        3, ['R R^2 R-1 R-1^2']],
-    ['TemporalFiltering',       3, ['DCT', 0.009, 0.08]],
-    ['Detrending',              0, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  3, []],
-    ['Scrubbing',               3, ['FD', 0.2]],
+    ['VoxelNormalization',      1, ['zscore']],
+    ['Detrending',              2, ['legendre', 3, 'WMCSF']],
+    ['TissueRegression',        3, ['WMCSF','GM']],
+    ['MotionRegression',        4, ['R dR']],
+    ['TemporalFiltering',       5, ['Gaussian', 1]],
+    ['Detrending',              6, ['legendre', 3,'GM']],
+    ['GlobalSignalRegression',  7, []],
+    ['Scrubbing',               0, ['FD', 0.2, 1]],
     ['SpatialSmoothing',        0, ['Gaussian', 6]],
 ]
 
@@ -154,7 +167,6 @@ def legendre_poly(order, nTRs):
     num_pol = range(order+1)
     y = np.ones((len(num_pol),len(x)))   
     coeff = np.eye(order+1)
-    # Print out text file for each polynomial to be used as a regressor
     for i in num_pol:
         myleg = Legendre(coeff[i])
         y[i,:] = myleg(x) 
@@ -309,9 +321,9 @@ def makeTissueMasks(subject,fmriRun,overwrite):
 
     return maskAll, maskWM_, maskCSF_, maskGM_
 
-
-def extract_noise_components(niiImg, WMmask, CSFmask, num_components=5, extra_regressors=None):
-    """Largely based on https://github.com/nipy/nipype/blob/master/examples/
+def extract_noise_components(niiImg, WMmask, CSFmask, num_components=5, flavor=None):
+    """
+    Largely based on https://github.com/nipy/nipype/blob/master/examples/
     rsfmri_vol_surface_preprocessing_nipy.py#L261
     Derive components most reflective of physiological noise according to
     aCompCor method (Behzadi 2007)
@@ -324,23 +336,45 @@ def extract_noise_components(niiImg, WMmask, CSFmask, num_components=5, extra_re
     -------
     components: n_time_points x regressors
     """
-    niiImgWMCSF = niiImg[np.logical_or(WMmask,CSFmask),:] 
-    
-    niiImgWMCSF[np.isnan(np.sum(niiImgWMCSF, axis=1)), :] = 0
-    # remove mean and normalize by variance
-    # voxel_timecourses.shape == [nvoxels, time]
-    X = niiImgWMCSF.T
-    stdX = np.std(X, axis=0)
-    stdX[stdX == 0] = 1.
-    stdX[np.isnan(stdX)] = 1.
-    stdX[np.isinf(stdX)] = 1.
-    X = (X - np.mean(X, axis=0)) / stdX
-    u, _, _ = linalg.svd(X, full_matrices=False)
-    components = u[:, :num_components]
-    
-    if extra_regressors:
-        components = np.hstack((components, regressors))
+    if flavor == 'WMCSF' or flavor == None:
+        niiImgWMCSF = niiImg[np.logical_or(WMmask,CSFmask),:] 
 
+        niiImgWMCSF[np.isnan(np.sum(niiImgWMCSF, axis=1)), :] = 0
+        # remove mean and normalize by variance
+        # voxel_timecourses.shape == [nvoxels, time]
+        X = niiImgWMCSF.T
+        stdX = np.std(X, axis=0)
+        stdX[stdX == 0] = 1.
+        stdX[np.isnan(stdX)] = 1.
+        stdX[np.isinf(stdX)] = 1.
+        X = (X - np.mean(X, axis=0)) / stdX
+        u, _, _ = linalg.svd(X, full_matrices=False)
+        components = u[:, :num_components]
+    elif flavor == 'WM+CSF':    
+        niiImgWM = niiImg[WMmask,:] 
+        niiImgWM[np.isnan(np.sum(niiImgWM, axis=1)), :] = 0
+        niiImgCSF = niiImg[CSFmask,:] 
+        niiImgCSF[np.isnan(np.sum(niiImgCSF, axis=1)), :] = 0
+        # remove mean and normalize by variance
+        # voxel_timecourses.shape == [nvoxels, time]
+        X = niiImgWM.T
+        stdX = np.std(X, axis=0)
+        stdX[stdX == 0] = 1.
+        stdX[np.isnan(stdX)] = 1.
+        stdX[np.isinf(stdX)] = 1.
+        X = (X - np.mean(X, axis=0)) / stdX
+        u, _, _ = linalg.svd(X, full_matrices=False)
+        components = u[:, :num_components]
+        X = niiImgCSF.T
+        stdX = np.std(X, axis=0)
+        stdX[stdX == 0] = 1.
+        stdX[np.isnan(stdX)] = 1.
+        stdX[np.isinf(stdX)] = 1.
+        X = (X - np.mean(X, axis=0)) / stdX
+        u, _, _ = linalg.svd(X, full_matrices=False)
+        components = np.hstack((components, u[:, :num_components]))
+    else:
+	print 'Warning! Wrong CompCor flavor. Nothing was done.'
     return components
 
 def conf2XML(inFile, dataDir, operations, startTime, endTime, fname):
@@ -373,13 +407,34 @@ def conf2XML(inFile, dataDir, operations, startTime, endTime, fname):
         nodeFlavor.text = str(op[2])
     tree = ET.ElementTree(doc)
     tree.write(fname)
+
+def checkXML(inFile, operations, params, resDir):
+    for xfile in listdir(resDir):
+        if fnmatch.fnmatch(op.join(resDir,xfile), op.join(resDir,'????????.xml')):
+            tree = ET.parse(op.join(resDir,xfile))
+            root = tree.getroot()
+            tvalue = root[0][0].text == inFile
+            if not tvalue:
+                return op.join(resDir,config.fmriRun+'_'+xfile.replace('.xml','.nii.gz'))
+            for el in root[2]:
+                tvalue = tvalue and (el.attrib['name'] in operations[int(el[0].text)])
+                tvalue = tvalue and (el[1].text in [repr(param) for param in params[int(el[0].text)]])
+                if not tvalue:
+                    return op.join(resDir,config.fmriRun+'_'+xfile.replace('.xml','.nii.gz'))
+    return None
     
 def fnSubmitToCluster(strScript, strJobFolder, strJobUID, resources):
     specifyqueue = ''
     # clean up .o and .e
     tmpfname = op.join(strJobFolder,strJobUID)
-    if op.isfile(tmpfname+'.e'): remove(tmpfname+'.e')       
-    if op.isfile(tmpfname+'.o'): remove(tmpfname+'.o')       
+    try:
+        remove(tmpfname+'.e')       
+    except OSError:
+        pass
+    try:
+        remove(tmpfname+'.o')       
+    except OSError:
+        pass
    
     strCommand = 'qsub {} -cwd -V {} -N {} -e "{}" -o "{}" "{}"'.format(specifyqueue,resources,strJobUID,
                       op.join(strJobFolder,strJobUID+'.e'), op.join(strJobFolder,strJobUID+'.o'), strScript)
@@ -602,15 +657,21 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
     elif flavor[0] == 'R dR':
         X = data
     elif flavor[0] == 'R R^2':
+        data = data[:,:6]
         data_squared = data ** 2
         X = np.concatenate((data, data_squared), axis=1)
     elif flavor[0] == 'R R^2 R-1 R-1^2':
+        data = data[:,:6]
         data_roll = np.roll(data, 1, axis=0)
         data_squared = data ** 2
         data_roll[0] = 0
         data_roll_squared = data_roll ** 2
         X = np.concatenate((data, data_squared, data_roll, data_roll_squared), axis=1)
+    elif flavor[0] == 'R dR R^2 dR^2':
+        data_squared = data ** 2
+        X = np.concatenate((data, data_squared), axis=1)
     elif flavor[0] == 'R R^2 R-1 R-1^2 R-2 R-2^2':
+        data = data[:,:6]
         data_roll = np.roll(data, 1, axis=0)
         data_squared = data ** 2
         data_roll[0] = 0
@@ -672,13 +733,9 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
     maskAll, maskWM_, maskCSF_, maskGM_ = masks
     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
 
-    if config.isCifti:
-        niiImgGM = niiImg
-    else:
-        niiImgGM = niiImg[maskGM_,:]
         
     if flavor[0] == 'CompCor':
-        X = extract_noise_components(niiImg, maskWM_, maskCSF_, num_components=flavor[1])
+        X = extract_noise_components(niiImg, maskWM_, maskCSF_, num_components=flavor[1], flavor=flavor[2])
         
     elif flavor[0] == 'WMCSF':
         meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
@@ -702,11 +759,30 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         dtCSF[1:] = np.diff(meanCSF, n=1)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis], 
                              dtWM[:,np.newaxis], dtCSF[:,np.newaxis]), axis=1)
+    elif flavor[0] == 'WMCSF+dt+sq':
+        meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
+        meanWM = meanWM - np.mean(meanWM)
+        meanWM = meanWM/max(meanWM)
+        meanCSF = np.mean(np.float64(niiImg[maskCSF_,:]),axis=0)
+        meanCSF = meanCSF - np.mean(meanCSF)
+        meanCSF = meanCSF/max(meanCSF)
+        dtWM=np.zeros(meanWM.shape)
+        dtWM[1:] = np.diff(meanWM, n=1)
+        dtCSF=np.zeros(meanCSF.shape)
+        dtCSF[1:] = np.diff(meanCSF, n=1)
+        sqmeanWM = meanWM ** 2
+        sqmeanCSF = meanCSF ** 2
+        sqdtWM = dtWM ** 2
+        sqdtCSF = dtCSF ** 2
+        X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis], 
+                             dtWM[:,np.newaxis], dtCSF[:,np.newaxis], 
+                             sqmeanWM[:,np.newaxis], sqmeanCSF[:,np.newaxis], 
+                             sqdtWM[:,np.newaxis], sqdtCSF[:,np.newaxis]),axis=1) 
     else:
         print 'Warning! Wrong tissue regression flavor. Nothing was done'
     
         
-    if flavor[1] == 'GM':
+    if flavor[-1] == 'GM':
         if config.isCifti:
             niiImgGM = niiImg
         else:
@@ -717,7 +793,7 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         else:
             niiImg = niiImgGM
         return niiImg
-    elif flavor[1] == 'wholebrain':
+    elif flavor[-1] == 'wholebrain':
         return X
     else:
         print 'Warning! Wrong tissue regression flavor. Nothing was done'
@@ -829,7 +905,23 @@ def GlobalSignalRegression(niiImg, flavor, masks, imgInfo):
     meanAll = np.mean(niiImg,axis=0)
     meanAll = meanAll - np.mean(meanAll)
     meanAll = meanAll/max(meanAll)
-    return meanAll[:,np.newaxis]
+    if flavor[0] == 'GS':
+        return meanAll[:,np.newaxis]
+    elif flavor[0] == 'GS+dt':
+        dtGS=np.zeros(meanAll.shape)
+        dtGS[1:] = np.diff(meanAll, n=1)
+        X  = np.concatenate((meanAll[:,np.newaxis], dtGS[:,np.newaxis]), axis=1)
+        return X
+    elif flavor[0] == 'GS+dt+sq':
+        dtGS = np.zeros(meanAll.shape)
+        dtGS[1:] = np.diff(meanAll, n=1)
+        sqGS = meanAll ** 2
+        sqdtGS = dtGS ** 2
+        X  = np.concatenate((meanAll[:,np.newaxis], dtGS[:,np.newaxis], sqGS[:,np.newaxis], sqdtGS[:,np.newaxis]), axis=1)
+        return X
+    else:
+        print 'Warning! Wrong normalization flavor. Using defalut regressor: GS'
+        return meanAll[:,np.newaxis]
 
 def VoxelNormalization(niiImg, flavor, masks, imgInfo):
     if flavor[0] == 'zscore':
