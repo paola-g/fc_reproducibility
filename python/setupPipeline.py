@@ -4,10 +4,10 @@ import pandas as pd
 import sys
 import numpy as np
 import os.path as op
-from os import mkdir, makedirs, getcwd, remove, listdir
+from os import mkdir, makedirs, getcwd, remove, listdir, environ
 import scipy.stats as stats
 import nipype.interfaces.fsl as fsl
-from subprocess import call, check_output, CalledProcessError
+from subprocess import call, check_output, CalledProcessError, getoutput
 import nibabel as nib
 import scipy.io as sio
 from sklearn import cross_validation
@@ -26,6 +26,9 @@ import xml.etree.cElementTree as ET
 from time import localtime, strftime, sleep
 import socket
 import fnmatch
+import re
+from past.utils import old_div
+import os
 # ### Parameters
 
 # these functions allow Paola & Julien to run code locally with their own path definitions
@@ -62,7 +65,7 @@ class config(object):
     isDataClean  = False
     doPlot       = False
     queue        = True
-
+    isCifti 	 = False
 
 # ### Pipeline definition
 
@@ -123,6 +126,11 @@ suffix = '_hp2000_clean' if config.isDataClean else ''
 config.filtering = []
 config.doScrubbing = False
 
+if config.isCifti:
+    config.ext = '.dtseries.nii'
+else:
+    config.ext = '.nii.gz'
+
 # regressors: to filter, no. time points x no. regressors
 def filter_regressors(regressors, filtering, nTRs, TR):
     if len(filtering)==0:
@@ -147,6 +155,20 @@ def regress(niiImg, nTRs, TR, regressors, preWhitening=False):
         fit = np.linalg.lstsq(X, niiImg[i,:].T)[0]
         fittedvalues = np.dot(X, fit)
         resid = niiImg[i,:] - np.ravel(fittedvalues)
+        niiImg[i,:] = resid
+    return niiImg 
+
+def partial_regress(niiImg, nTRs, TR, regressors, partialIdx, preWhitening=False):    
+    if preWhitening:
+        W = prewhitening(niiImg, nTRs, TR, regressors)
+        niiImg = np.dot(niiImg,W)
+        regressors = np.dot(W,regressors)
+    X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
+    N = niiImg.shape[0]
+    for i in range(N):
+        fit = np.linalg.lstsq(X, niiImg[i,:].T)[0]
+        fittedvalues = np.dot(X[:,partialIdx], fit[partialIdx])
+        resid = niiImg[i,:] - fittedvalues
         niiImg[i,:] = resid
     return niiImg 
 
@@ -415,12 +437,15 @@ def checkXML(inFile, operations, params, resDir):
             root = tree.getroot()
             tvalue = root[0][0].text == inFile
             if not tvalue:
-                return op.join(resDir,config.fmriRun+'_'+xfile.replace('.xml','.nii.gz'))
+                continue
             for el in root[2]:
                 tvalue = tvalue and (el.attrib['name'] in operations[int(el[0].text)])
                 tvalue = tvalue and (el[1].text in [repr(param) for param in params[int(el[0].text)]])
                 if not tvalue:
-                    return op.join(resDir,config.fmriRun+'_'+xfile.replace('.xml','.nii.gz'))
+                    continue
+                else:    
+                    rcode = xfile.replace('.xml','')
+                    return op.join(resDir,rcode,config.fmriRun+'_prepro'+config.ext)
     return None
     
 def fnSubmitToCluster(strScript, strJobFolder, strJobUID, resources):
@@ -641,6 +666,303 @@ def prewhitening(niiImg, nTRs, TR, X):
     W = linalg.inv(sqrtm(V))
     return W
 
+def get_rcode(mystring):
+    if not config.isCifti:
+        rcode = re.search('.*/(........)/.*\.nii.gz', mystring).group(1)
+    else:
+        rcode = re.search('.*/(........)/.*\.dtseries.nii', mystring).group(1)
+    return rcode
+
+"""
+The following functions implement the ICA-AROMA algorithm (Pruim et al. 2015) 
+and are adapted from https://github.com/rhr-pruim/ICA-AROMA
+"""
+
+def feature_time_series(melmix, mc):
+    """ This function extracts the maximum RP correlation feature scores. 
+    It determines the maximum robust correlation of each component time-series 
+    with a model of 72 realigment parameters.
+
+    Parameters
+    ---------------------------------------------------------------------------------
+    melmix:     Full path of the melodic_mix text file
+    mc:     Full path of the text file containing the realignment parameters
+    
+    Returns
+    ---------------------------------------------------------------------------------
+    maxRPcorr:  Array of the maximum RP correlation feature scores for the components of the melodic_mix file"""
+
+    # Read melodic mix file (IC time-series), subsequently define a set of squared time-series
+    mix = np.loadtxt(melmix)
+    mixsq = np.power(mix,2)
+
+    # Read motion parameter file
+    RP6 = np.loadtxt(mc)[:,:6]
+
+    # Determine the derivatives of the RPs (add zeros at time-point zero)
+    RP6_der = np.array(RP6[list(range(1,RP6.shape[0])),:] - RP6[list(range(0,RP6.shape[0]-1)),:])
+    RP6_der = np.concatenate((np.zeros((1,6)),RP6_der),axis=0)
+
+    # Create an RP-model including the RPs and its derivatives
+    RP12 = np.concatenate((RP6,RP6_der),axis=1)
+
+    # Add the squared RP-terms to the model
+    RP24 = np.concatenate((RP12,np.power(RP12,2)),axis=1)
+
+    # Derive shifted versions of the RP_model (1 frame for and backwards)
+    RP24_1fw = np.concatenate((np.zeros((1,24)),np.array(RP24[list(range(0,RP24.shape[0]-1)),:])),axis=0)
+    RP24_1bw = np.concatenate((np.array(RP24[list(range(1,RP24.shape[0])),:]),np.zeros((1,24))),axis=0)
+
+    # Combine the original and shifted mot_pars into a single model
+    RP_model = np.concatenate((RP24,RP24_1fw,RP24_1bw),axis=1)
+
+    # Define the column indices of respectively the squared or non-squared terms
+    idx_nonsq = np.array(np.concatenate((list(range(0,12)), list(range(24,36)), list(range(48,60))),axis=0))
+    idx_sq = np.array(np.concatenate((list(range(12,24)), list(range(36,48)), list(range(60,72))),axis=0))
+
+    # Determine the maximum correlation between RPs and IC time-series
+    nSplits=int(1000)
+    maxTC = np.zeros((nSplits,mix.shape[1]))
+    for i in range(0,nSplits):
+        # Get a random set of 90% of the dataset and get associated RP model and IC time-series matrices
+        idx = np.array(random.sample(list(range(0,mix.shape[0])),int(round(0.9*mix.shape[0]))))
+        RP_model_temp = RP_model[idx,:]
+        mix_temp = mix[idx,:]
+        mixsq_temp = mixsq[idx,:]
+
+        # Calculate correlation between non-squared RP/IC time-series
+        RP_model_nonsq = RP_model_temp[:,idx_nonsq]
+        cor_nonsq = np.array(np.zeros((mix_temp.shape[1],RP_model_nonsq.shape[1])))
+        for j in range(0,mix_temp.shape[1]):
+            for k in range(0,RP_model_nonsq.shape[1]):
+                cor_temp = np.corrcoef(mix_temp[:,j],RP_model_nonsq[:,k])
+                cor_nonsq[j,k] = cor_temp[0,1]
+
+        # Calculate correlation between squared RP/IC time-series
+        RP_model_sq = RP_model_temp[:,idx_sq]
+        cor_sq = np.array(np.zeros((mix_temp.shape[1],RP_model_sq.shape[1])))
+        for j in range(0,mixsq_temp.shape[1]):
+            for k in range(0,RP_model_sq.shape[1]):
+                cor_temp = np.corrcoef(mixsq_temp[:,j],RP_model_sq[:,k])
+                cor_sq[j,k] = cor_temp[0,1]
+
+        # Combine the squared an non-squared correlation matrices
+        corMatrix = np.concatenate((cor_sq,cor_nonsq),axis=1)
+
+        # Get maximum absolute temporal correlation for every IC
+        corMatrixAbs = np.abs(corMatrix)
+        maxTC[i,:] = corMatrixAbs.max(axis=1)
+
+    # Get the mean maximum correlation over all random splits
+    maxRPcorr = maxTC.mean(axis=0)
+
+    # Return the feature score
+    return maxRPcorr
+
+def feature_frequency(melFTmix, TR):
+    """ 
+    Taken from https://github.com/rhr-pruim/ICA-AROMA
+    This function extracts the high-frequency content feature scores. 
+    It determines the frequency, as fraction of the Nyquist frequency, 
+    at which the higher and lower frequencies explain half of the total power between 0.01Hz and Nyquist. 
+    
+    Parameters
+    ---------------------------------------------------------------------------------
+    melFTmix:   Full path of the melodic_FTmix text file
+    TR:     TR (in seconds) of the fMRI data (float)
+    
+    Returns
+    ---------------------------------------------------------------------------------
+    HFC:        Array of the HFC ('High-frequency content') feature scores for the components of the melodic_FTmix file"""
+
+    
+    # Determine sample frequency
+    Fs = old_div(1,TR)
+
+    # Determine Nyquist-frequency
+    Ny = old_div(Fs,2)
+        
+    # Load melodic_FTmix file
+    FT=np.loadtxt(melFTmix)
+
+    # Determine which frequencies are associated with every row in the melodic_FTmix file  (assuming the rows range from 0Hz to Nyquist)
+    f = Ny*(np.array(list(range(1,FT.shape[0]+1))))/(FT.shape[0])
+
+    # Only include frequencies higher than 0.01Hz
+    fincl = np.squeeze(np.array(np.where( f > 0.01 )))
+    FT=FT[fincl,:]
+    f=f[fincl]
+
+    # Set frequency range to [0-1]
+    f_norm = old_div((f-0.01),(Ny-0.01))
+
+    # For every IC; get the cumulative sum as a fraction of the total sum
+    fcumsum_fract = old_div(np.cumsum(FT,axis=0), np.sum(FT,axis=0))
+
+    # Determine the index of the frequency with the fractional cumulative sum closest to 0.5
+    idx_cutoff=np.argmin(np.abs(fcumsum_fract-0.5),axis=0)
+
+    # Now get the fractions associated with those indices index, these are the final feature scores
+    HFC = f_norm[idx_cutoff]
+         
+    # Return feature score
+    return HFC
+
+def feature_spatial(fslDir, tempDir, aromaDir, melIC):
+    """ 
+    Taken from https://github.com/rhr-pruim/ICA-AROMA
+    This function extracts the spatial feature scores. 
+    For each IC it determines the fraction of the mixture modeled thresholded Z-maps 
+    respecitvely located within the CSF or at the brain edges, using predefined standardized masks.
+
+    Parameters
+    ---------------------------------------------------------------------------------
+    fslDir:     Full path of the bin-directory of FSL
+    tempDir:    Full path of a directory where temporary files can be stored (called 'temp_IC.nii.gz')
+    aromaDir:   Full path of the ICA-AROMA directory, containing the mask-files (mask_edge.nii.gz, mask_csf.nii.gz & mask_out.nii.gz) 
+    melIC:      Full path of the nii.gz file containing mixture-modeled threholded (p>0.5) Z-maps, registered to the MNI152 2mm template
+    
+    Returns
+    ---------------------------------------------------------------------------------
+    edgeFract:  Array of the edge fraction feature scores for the components of the melIC file
+    csfFract:   Array of the CSF fraction feature scores for the components of the melIC file"""
+
+    # Get the number of ICs
+    numICs = int(getoutput('%sfslinfo %s | grep dim4 | head -n1 | awk \'{print $2}\'' % (fslDir, melIC) ))
+
+    # Loop over ICs
+    edgeFract=np.zeros(numICs)
+    csfFract=np.zeros(numICs)
+    for i in range(0,numICs):
+        # Define temporary IC-file
+        tempIC = op.join(tempDir,'temp_IC.nii.gz')
+
+        # Extract IC from the merged melodic_IC_thr2MNI2mm file
+        os.system(' '.join([op.join(fslDir,'fslroi'),
+            melIC,
+            tempIC,
+            str(i),
+            '1']))
+
+        # Change to absolute Z-values
+        os.system(' '.join([op.join(fslDir,'fslmaths'),
+            tempIC,
+            '-abs',
+            tempIC]))
+        
+        # Get sum of Z-values within the total Z-map (calculate via the mean and number of non-zero voxels)
+        totVox = int(getoutput(' '.join([op.join(fslDir,'fslstats'),
+                            tempIC,
+                            '-V | awk \'{print $1}\''])))
+        
+        if not (totVox == 0):
+            totMean = float(getoutput(' '.join([op.join(fslDir,'fslstats'),
+                            tempIC,
+                            '-M'])))
+        else:
+            print '     - The spatial map of component ' + str(i+1) + ' is empty. Please check!'
+            totMean = 0
+
+        totSum = totMean * totVox
+        
+        # Get sum of Z-values of the voxels located within the CSF (calculate via the mean and number of non-zero voxels)
+        csfVox = int(getoutput(' '.join([op.join(fslDir,'fslstats'),
+                            tempIC,
+                            '-k mask_csf.nii.gz',
+                            '-V | awk \'{print $1}\''])))
+
+        if not (csfVox == 0):
+            csfMean = float(getoutput(' '.join([op.join(fslDir,'fslstats'),
+                            tempIC,
+                            '-k mask_csf.nii.gz',
+                            '-M'])))
+        else:
+            csfMean = 0
+
+        csfSum = csfMean * csfVox   
+
+        # Get sum of Z-values of the voxels located within the Edge (calculate via the mean and number of non-zero voxels)
+        edgeVox = int(getoutput(' '.join([op.join(fslDir,'fslstats'),
+                            tempIC,
+                            '-k mask_edge.nii.gz',
+                            '-V | awk \'{print $1}\''])))
+        if not (edgeVox == 0):
+            edgeMean = float(getoutput(' '.join([op.join(fslDir,'fslstats'),
+                            tempIC,
+                            '-k mask_edge.nii.gz',
+                            '-M'])))
+        else:
+            edgeMean = 0
+        
+        edgeSum = edgeMean * edgeVox
+
+        # Get sum of Z-values of the voxels located outside the brain (calculate via the mean and number of non-zero voxels)
+        outVox = int(getoutput(' '.join([op.join(fslDir,'fslstats'),
+                            tempIC,
+                            '-k mask_out.nii.gz',
+                            '-V | awk \'{print $1}\''])))
+        if not (outVox == 0):
+            outMean = float(getoutput(' '.join([op.join(fslDir,'fslstats'),
+                            tempIC,
+                            '-k mask_out.nii.gz',
+                            '-M'])))
+        else:
+            outMean = 0
+        
+        outSum = outMean * outVox
+
+        # Determine edge and CSF fraction
+        if not (totSum == 0):
+            edgeFract[i] = old_div((outSum + edgeSum),(totSum - csfSum))
+            csfFract[i] = old_div(csfSum, totSum)
+        else:
+            edgeFract[i]=0
+            csfFract[i]=0
+
+    # Remove the temporary IC-file
+    remove(tempIC)
+
+    # Return feature scores
+    return edgeFract, csfFract
+
+def classification(outDir, maxRPcorr, edgeFract, HFC, csfFract):
+    """ 
+    Taken from https://github.com/rhr-pruim/ICA-AROMA
+    This function classifies a set of components into motion and non-motion 
+    components based on four features; maximum RP correlation, high-frequency content, 
+    edge-fraction and CSF-fraction
+
+    Parameters
+    ---------------------------------------------------------------------------------
+    outDir:     Full path of the output directory
+    maxRPcorr:  Array of the 'maximum RP correlation' feature scores of the components
+    edgeFract:  Array of the 'edge fraction' feature scores of the components
+    HFC:        Array of the 'high-frequency content' feature scores of the components
+    csfFract:   Array of the 'CSF fraction' feature scores of the components
+
+    Return
+    ---------------------------------------------------------------------------------
+    motionICs   Array containing the indices of the components identified as motion components
+
+    Output (within the requested output directory)
+    ---------------------------------------------------------------------------------
+    classified_motion_ICs.txt   A text file containing the indices of the components identified as motion components """
+
+    # Classify the ICs as motion or non-motion
+
+    # Define criteria needed for classification (thresholds and hyperplane-parameters)
+    thr_csf = 0.10
+    thr_HFC = 0.35
+    hyp = np.array([-19.9751070082159, 9.95127547670627, 24.8333160239175])
+    
+    # Project edge & maxRPcorr feature scores to new 1D space
+    x = np.array([maxRPcorr, edgeFract])
+    proj = hyp[0] + np.dot(x.T,hyp[1:])
+
+    # Classify the ICs
+    motionICs = np.squeeze(np.array(np.where((proj > 0) + (csfFract > thr_csf) + (HFC > thr_HFC))))
+
+    return motionICs
 
 # ### Pipeline setup
 
@@ -680,6 +1002,47 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         data_roll2[0] = 0
         data_roll2_squared = data_roll2 ** 2
         X = np.concatenate((data, data_squared, data_roll, data_roll_squared, data_roll2, data_roll2_squared), axis=1)
+    elif flavor[0] == 'ICA-AROMA':
+	nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
+        fslDir = op.join(environ["FSLDIR"],'bin','')
+        icaOut = op.join(buildpath(config.subject,config.fmriRun), 'rfMRI_REST1_LR_hp2000.ica','filtered_func_data.ica')
+        melIC_MNI = op.join(icaOut,'melodic_IC.nii.gz')
+        melmix = op.join(icaOut,'melodic_mix')
+        melFTmix = op.join(icaOut,'melodic_FTmix')
+        
+        edgeFract, csfFract = feature_spatial(fslDir, icaOut, getcwd(), melIC_MNI)
+        maxRPcorr = feature_time_series(melmix, motionFile)
+        HFC = feature_frequency(melFTmix, TR)
+        motionICs = classification(icaOut, maxRPcorr, edgeFract, HFC, csfFract)
+        
+        if len(motionICs) > 0:
+            melmix = op.join(icaOut,'melodic_mix')
+            if len(flavor)>1:
+                denType = flavor[1]
+            else:
+                denType = 'aggr'
+            if denType == 'aggr':
+                X = np.loadtxt(melmix)[:,motionICs]
+            else:
+                # Partial regression
+                X = np.loadtxt(melmix)
+                # if filtering has already been performed, regressors need to be filtered too
+                if len(config.filtering)>0:
+                    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
+                    X = filter_regressors(X, config.filtering, nTRs, TR)  
+
+                if config.doScrubbing:
+                    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
+                    toCensor = np.loadtxt(op.join(buildpath(config.subject,config.fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
+                    toReg = np.zeros((nTRs, 1),dtype=np.float32)
+                    toReg[toCensor] = 1
+                    X = np.concatenate((X, toReg), axis=1)
+                    
+                niiImg = partial_regress(niiImg, nTRs, TR, X, motionICs, config.preWhitening)
+                return niiImg
+        else:
+            print 'ICA-AROMA: None of the components was classified as motion, so no denoising is applied.'
+            
     else:
         print 'Wrong flavor, using default regressors: R dR'
         X = data   

@@ -36,8 +36,16 @@ def runPipeline(subject, fmriRun, fmriFile):
     maskAll, maskWM_, maskCSF_, maskGM_ = masks    
         
     precomputed = checkXML(fmriFile,steps,Flavors,buildpath(subject, fmriRun)) 
+    print precomputed
     if precomputed and not config.overwrite:
         print "Preprocessing already computed. Using old file..."
+        rstring = get_rcode(precomputed)
+        outDir = op.join(buildpath(subject, fmriRun),rstring)
+        outFile = fmriRun+'_prepro'
+        try:
+            mkdir(outDir)
+        except OSError:
+            pass
         with open(precomputed, 'rb') as fFile:
             decompressedFile = gzip.GzipFile(fileobj=fFile)
             outFilePath = precomputed.replace('.nii.gz', '.nii')
@@ -67,7 +75,8 @@ def runPipeline(subject, fmriRun, fmriFile):
             if len(step) == 1:
                 # Atomic operations
                 if 'Regression' in step[0] or ('TemporalFiltering' in step[0] and 'DCT' in Flavors[i][0]) or ('wholebrain' in Flavors[i][0]):
-                    if step[0]=='TissueRegression' and 'GM' in Flavors[i][0]: #regression constrained to GM
+                    if (step[0]=='TissueRegression' and 'GM' in Flavors[i][0]) or (step[0]=='MotionRegression' and 'nonaggr' in Flavors[i][0]): 
+                        #regression constrained to GM or nonagrr ICA-AROMA
                         niiImg = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
                     else:
                         r0 = Hooks[step[0]](niiImg, Flavors[i][0], masks, imgInfo[1:])
@@ -81,7 +90,8 @@ def runPipeline(subject, fmriRun, fmriFile):
                 for j in range(len(step)):
                     opr = step[j]
                     if 'Regression' in opr or ('TemporalFiltering' in opr and 'DCT' in Flavors[i][j]) or ('wholebrain' in Flavors[i][j]):
-                        if opr=='TissueRegression' and 'GM' in Flavors[i][j]: #regression constrained to GM
+                        if (opr=='TissueRegression' and 'GM' in Flavors[i][j]) or (opr=='MotionRegression' and 'nonaggr' in Flavors[i][j]): 
+                            #regression constrained to GM or nonaggr ICA-AROMA
                             niiImg = Hooks[opr](niiImg, Flavors[i][j], masks, imgInfo[1:])
                         else:    
                             r0 = Hooks[opr](niiImg, Flavors[i][j], masks, imgInfo[1:])
@@ -94,17 +104,19 @@ def runPipeline(subject, fmriRun, fmriFile):
 
         print 'Done! Copy the resulting file...'
         rstring = ''.join(random.SystemRandom().choice(string.ascii_lowercase +string.ascii_uppercase + string.digits) for _ in range(8))
-        outFile = fmriRun+'_'+rstring
+        outDir = op.join(buildpath(subject,fmriRun),rstring)
+        mkdir(outDir)
+        outFile = fmriRun+'_prepro'
         if config.isCifti:
             # write to text file
-            np.savetxt(op.join(buildpath(subject,fmriRun),outFile+'.tsv'),niiImg, delimiter='\t', fmt='%.6f')
+            np.savetxt(op.join(outDir,outFile+'.tsv'),niiImg, delimiter='\t', fmt='%.6f')
             # need to convert back to cifti
-            cmd = 'wb_command -cifti-convert -from-text {} {} {}'.format(op.join(buildpath(subject,fmriRun),outFile+'.tsv'),
+            cmd = 'wb_command -cifti-convert -from-text {} {} {}'.format(op.join(outDir,outFile+'.tsv'),
                                                                          fmriFile,
-                                                                         op.join(buildpath(subject,fmriRun),outFile+'.dtseries.nii'))
+                                                                         op.join(outDir,outFile+'.dtseries.nii'))
             call(cmd,shell=True)
             # delete temporary files
-            cmd = 'rm -r {}/*.tsv'.format(buildpath(subject,fmriRun))
+            cmd = 'rm -r {}/*.tsv'.format(outDir)
             call(cmd,shell=True)
             del niiImg
         else:
@@ -113,12 +125,12 @@ def runPipeline(subject, fmriRun, fmriFile):
             del niiImg
             niiimg = np.reshape(niiimg, (nRows, nCols, nSlices, nTRs), order='F')
             newimg = nib.Nifti1Image(niiimg.astype('<f4'), affine)
-            nib.save(newimg,op.join(buildpath(subject,fmriRun),outFile+'.nii.gz'))
+            nib.save(newimg,op.join(outDir,outFile+'.nii.gz'))
 
 
 	if hasattr(config, 'logfile'):
             f=open(config.logfile, "a+")
-            f.write('{},{},{}\n'.format(subject,fmriRun,outFile))
+            f.write('{},{},{}\n'.format(subject,fmriRun,op.join(outDir,outFile)))
             f.close()
 
         timeEnd = localtime()  
@@ -128,8 +140,8 @@ def runPipeline(subject, fmriRun, fmriFile):
 
     print 'Preprocessing complete. Starting FC computation...'
     # After preprocessing, functional connectivity is computed
-    tsDir = op.join(buildpath(subject,fmriRun),config.parcellation)
-    if not op.isdir(tsDir): mkdir(tsDir)
+    tsDir = op.join(outDir,outFile+config.ext+'_parcellated',config.parcellation)
+    if not op.isdir(tsDir): makedirs(tsDir)
     alltsFile = op.join(ResultsDir,subject+'_'+fmriRun+'.txt')
     
     if not (op.isfile(alltsFile)) or config.overwrite:            
