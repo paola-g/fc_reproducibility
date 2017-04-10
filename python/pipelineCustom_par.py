@@ -74,21 +74,10 @@ for iSub in range(len(subjects)):
     for iPEdir in range(len(PEdirs)):
         PEdir=PEdirs[iPEdir]
         fmriRun = config.thisRun+'_'+PEdir
-        if config.parcellation=='shenetal_neuroimage2013':
-            fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
-            config.isCifti=0
-        elif config.parcellation=='shenetal_neuroimage2013_new':
-            fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
-            config.isCifti=0
-        elif config.parcellation=='Glasser_Aseg_Suit':
+        if isCifti:
             fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+'_Atlas'+suffix+'.dtseries.nii')
-            config.isCifti=1
-        elif config.parcellation=='Glasser_CIT168Amy_Aseg_Suit':
-            fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+'_Atlas'+suffix+'.dtseries.nii')
-            config.isCifti=1
         else:
-            print 'Wrong parcellation code'
-            exit()
+            fmriFile = op.join(buildpath(subject,fmriRun), fmriRun+suffix+'.nii.gz')
         if not op.isfile(fmriFile):
             print str(subjects[iSub]), 'missing', fmriFile, ', exclude'
             excludeSub.append(iSub)
@@ -152,14 +141,7 @@ print 'With all subjects: corr(IQ,motion) = {:.3f} (p = {:.3f})'.format(rho2,p2)
 print 'After discarding high movers: corr(IQ,motion) = {:.3f} (p = {:.3f})'.format(rho1,p1)
 
 print 'Computing correlation matrices...'
-if config.parcellation=='shenetal_neuroimage2013':
-    nParcels = 268
-if config.parcellation=='shenetal_neuroimage2013_new':
-    nParcels = 268
-elif config.parcellation=='Glasser_Aseg_Suit':
-    nParcels = 405
-elif config.parcellation=='Glasser_CIT168Amy_Aseg_Suit':
-    nParcels = 423
+nParcels = config.nParcels
 for iSub in range(len(subjects)):
     if iSub not in excludeSub:
         tsFile_LR=op.join(ResultsDir,str(subjects[iSub])+'_'+config.thisRun+'_LR.txt')

@@ -9,27 +9,9 @@ def runPipeline(subject, fmriRun, fmriFile):
     if not op.isdir(ResultsDir): mkdir(ResultsDir)
     ResultsDir = op.join(ResultsDir,config.parcellation)
     if not op.isdir(ResultsDir): mkdir(ResultsDir)
+    parcelVolume = 'Parcels' + config.ext
+    uniqueParcels = range(config.nParcels)
         
-    if config.parcellation=='shenetal_neuroimage2013':
-        uniqueParcels = range(268)
-        config.isCifti = 0
-        parcelVolume = 'fconn_atlas_150_2mm.nii'
-    elif config.parcellation=='shenetal_neuroimage2013_new':
-        uniqueParcels = range(268)
-        config.isCifti = 0
-        parcelVolume = 'shen_2mm_268_parcellation.nii.gz'
-    elif config.parcellation=='Glasser_Aseg_Suit':
-        config.isCifti = 1
-        parcelVolume = 'Parcels.dlabel.nii'
-        uniqueParcels = range(405)
-    elif config.parcellation=='Glasser_CIT168Amy_Aseg_Suit':
-        config.isCifti = 1
-        parcelVolume = 'Parcels.dlabel.nii'
-        uniqueParcels = range(423)
-    else:
-        print "Invalid parcellation code"
-        return
-
     print 'Step 0'
     print 'Building WM, CSF and GM masks...'
     masks = makeTissueMasks(subject,fmriRun,False)

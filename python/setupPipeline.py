@@ -131,6 +131,8 @@ if config.isCifti:
 else:
     config.ext = '.nii.gz'
 
+config.nParcels = rawgencount(op.join(PARCELDIR,config.parcellation,'labels.txt'))/2
+
 # regressors: to filter, no. time points x no. regressors
 def filter_regressors(regressors, filtering, nTRs, TR):
     if len(filtering)==0:
@@ -672,6 +674,17 @@ def get_rcode(mystring):
     else:
         rcode = re.search('.*/(........)/.*\.dtseries.nii', mystring).group(1)
     return rcode
+
+def _make_gen(reader):
+    b = reader(1024 * 1024)
+    while b:
+        yield b
+        b = reader(1024*1024)
+
+def rawgencount(filename):
+    f = open(filename, 'rb')
+    f_gen = _make_gen(f.raw.read)
+    return sum( buf.count(b'\n') for buf in f_gen )
 
 """
 The following functions implement the ICA-AROMA algorithm (Pruim et al. 2015) 
