@@ -58,7 +58,7 @@ class config(object):
     behavFile    = op.join(DATADIR,'..','neuropsych','unrestricted_luckydjuju_11_17_2015_0_47_11.csv')
     release      = 'Q2'
     outScore     = 'PMAT24_A_CR'
-    pipelineName = 'Finn_Q2_R1_new'
+    pipelineName = 'testPipeline'
     parcellation = 'shenetal_neuroimage2013_new'
     overwrite    = False
     thisRun      = 'rfMRI_REST1'
@@ -95,15 +95,14 @@ config.preWhitening = False
 #]
 
 Operations= [
-    ['VoxelNormalization',      1, ['zscore']],
-    ['Detrending',              2, ['legendre', 3, 'WMCSF']],
-    ['TissueRegression',        3, ['WMCSF','GM']],
-    ['MotionRegression',        4, ['R dR']],
-    ['TemporalFiltering',       5, ['Gaussian', 1]],
-    ['Detrending',              6, ['legendre', 3,'GM']],
-    ['GlobalSignalRegression',  7, ['GS']],
-    ['Scrubbing',               0, []],
-    ['SpatialSmoothing',        0, []],
+    ['VoxelNormalization',      1, ['demean']],
+    ['Detrending',              2, ['poly', 3, 'GM']],
+    ['TissueRegression',        2, ['WMCSF+dt+sq','wholebrain']],
+    ['MotionRegression',        3, ['ICA-AROMA', 'aggr']],
+    ['TemporalFiltering',       4, ['Butter', 0.009, 0.08]],
+    ['GlobalSignalRegression',  2, ['GS+dt+sq']],
+    ['Scrubbing',               3, ['FD', 0.2]],
+    ['SpatialSmoothing',        0, ['Gaussian', 6]],
 ]
 
 
@@ -131,7 +130,6 @@ if config.isCifti:
 else:
     config.ext = '.nii.gz'
 
-config.nParcels = rawgencount(op.join(PARCELDIR,config.parcellation,'labels.txt'))/2
 
 # regressors: to filter, no. time points x no. regressors
 def filter_regressors(regressors, filtering, nTRs, TR):
@@ -683,8 +681,8 @@ def _make_gen(reader):
 
 def rawgencount(filename):
     f = open(filename, 'rb')
-    f_gen = _make_gen(f.raw.read)
-    return sum( buf.count(b'\n') for buf in f_gen )
+    f_gen = _make_gen(f.read)
+    return int(sum( buf.count(b'\n') for buf in f_gen ))
 
 """
 The following functions implement the ICA-AROMA algorithm (Pruim et al. 2015) 
@@ -1357,3 +1355,4 @@ for opr in sortedOperations:
             steps[cstep].append(opr[0])
             Flavors[cstep].append(opr[2])
 
+config.nParcels = int(rawgencount(op.join(PARCELDIR,config.parcellation,'labels.txt'))/2)

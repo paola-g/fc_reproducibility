@@ -18,7 +18,7 @@ def runPipeline(subject, fmriRun, fmriFile):
     maskAll, maskWM_, maskCSF_, maskGM_ = masks    
         
     precomputed = checkXML(fmriFile,steps,Flavors,buildpath(subject, fmriRun)) 
-    print precomputed
+    print 'Precomputed file: '+ str(precomputed)
     if precomputed and not config.overwrite:
         print "Preprocessing already computed. Using old file..."
         rstring = get_rcode(precomputed)
@@ -52,7 +52,7 @@ def runPipeline(subject, fmriRun, fmriFile):
         nsteps = len(steps)
         for i in range(1,nsteps+1):
             step = steps[i]
-            print 'Step '+str(i)+' '+str(step[0])
+            print 'Step '+str(i)+' '+str(step)
 
             if len(step) == 1:
                 # Atomic operations
@@ -128,7 +128,7 @@ def runPipeline(subject, fmriRun, fmriFile):
     
     if not (op.isfile(alltsFile)) or config.overwrite:            
         # calculate signal in each of the nodes by averaging across all voxels/grayordinates in node
-        print 'Extracting mean data from',str(len(uniqueParcels)),'parcels for ',outFile
+        print 'Extracting mean data from',str(len(uniqueParcels)),'parcels for ',op.join(outDir,outFile)
         
         if not config.isCifti:
             with open(op.join(PARCELDIR, config.parcellation, parcelVolume), 'rb') as fFile:
@@ -175,5 +175,10 @@ def runPipeline(subject, fmriRun, fmriFile):
         try:
             remove(op.join(tsDir, 'temp_parcellation.nii')) 
         except OSError:
+            pass
+        try: 
+            if(precomputed):
+                remove(precomputed.replace('.nii.gz', '.nii'))
+        except OSError: 
             pass
         del niiimg
