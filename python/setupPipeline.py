@@ -1112,19 +1112,19 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         X = extract_noise_components(niiImg, maskWM_, maskCSF_, num_components=flavor[1], flavor=flavor[2])
         
     elif flavor[0] == 'WMCSF':
-        meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
+        meanWM = np.mean(np.float32(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
         meanWM = meanWM/max(meanWM)
-        meanCSF = np.mean(np.float64(niiImg[maskCSF_,:]),axis=0)
+        meanCSF = np.mean(np.float32(niiImg[maskCSF_,:]),axis=0)
         meanCSF = meanCSF - np.mean(meanCSF)
         meanCSF = meanCSF/max(meanCSF)
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis]), axis=1)
         
     elif flavor[0] == 'WMCSF+dt':
-        meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
+        meanWM = np.mean(np.float32(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
         meanWM = meanWM/max(meanWM)
-        meanCSF = np.mean(np.float64(niiImg[maskCSF_,:]),axis=0)
+        meanCSF = np.mean(np.float32(niiImg[maskCSF_,:]),axis=0)
         meanCSF = meanCSF - np.mean(meanCSF)
         meanCSF = meanCSF/max(meanCSF)
         dtWM=np.zeros(meanWM.shape,dtype=np.float32)
@@ -1134,10 +1134,10 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         X  = np.concatenate((meanWM[:,np.newaxis], meanCSF[:,np.newaxis], 
                              dtWM[:,np.newaxis], dtCSF[:,np.newaxis]), axis=1)
     elif flavor[0] == 'WMCSF+dt+sq':
-        meanWM = np.mean(np.float64(niiImg[maskWM_,:]),axis=0)
+        meanWM = np.mean(np.float32(niiImg[maskWM_,:]),axis=0)
         meanWM = meanWM - np.mean(meanWM)
         meanWM = meanWM/max(meanWM)
-        meanCSF = np.mean(np.float64(niiImg[maskCSF_,:]),axis=0)
+        meanCSF = np.mean(np.float32(niiImg[maskCSF_,:]),axis=0)
         meanCSF = meanCSF - np.mean(meanCSF)
         meanCSF = meanCSF/max(meanCSF)
         dtWM=np.zeros(meanWM.shape,dtype=np.float32)
@@ -1152,6 +1152,11 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
                              dtWM[:,np.newaxis], dtCSF[:,np.newaxis], 
                              sqmeanWM[:,np.newaxis], sqmeanCSF[:,np.newaxis], 
                              sqdtWM[:,np.newaxis], sqdtCSF[:,np.newaxis]),axis=1) 
+    elif flavor[0] == 'GM':
+        meanGM = np.mean(np.float32(niiImg[maskGM_,:]),axis=0)
+        meanGM = meanGM - np.mean(meanGM)
+        meanGM = meanGM/max(meanGM)
+        X = meanGM[:,np.newaxis]
     else:
         print 'Warning! Wrong tissue regression flavor. Nothing was done'
     
