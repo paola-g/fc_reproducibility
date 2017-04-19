@@ -1157,6 +1157,11 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         meanGM = meanGM - np.mean(meanGM)
         meanGM = meanGM/max(meanGM)
         X = meanGM[:,np.newaxis]
+    elif flavor[0] == 'WM':
+        meanWM = np.mean(np.float32(niiImg[maskWM_,:]),axis=0)
+        meanWM = meanWM - np.mean(meanWM)
+        meanWM = meanWM/max(meanWM)
+        X = meanWM[:,np.newaxis]   
     else:
         print 'Warning! Wrong tissue regression flavor. Nothing was done'
     
