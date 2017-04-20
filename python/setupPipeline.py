@@ -1045,8 +1045,10 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
                 if config.doScrubbing:
                     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
                     toCensor = np.loadtxt(op.join(buildpath(config.subject,config.fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
-                    toReg = np.zeros((nTRs, 1),dtype=np.float32)
-                    toReg[toCensor] = 1
+                    npts = len(toCensor)
+                    toReg = np.zeros((nTRs, npts),dtype=np.float32)
+                    for i in range(npts):
+                        toReg[toCensor[i],i] = 1
                     X = np.concatenate((X, toReg), axis=1)
                     
                 niiImg = partial_regress(niiImg, nTRs, TR, X, motionICs, config.preWhitening)
@@ -1065,8 +1067,10 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
     if config.doScrubbing:
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         toCensor = np.loadtxt(op.join(buildpath(config.subject,config.fmriRun), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
-        toReg = np.zeros((nTRs, 1),dtype=np.float32)
-        toReg[toCensor] = 1
+        npts = len(toCensor)
+        toReg = np.zeros((nTRs, npts),dtype=np.float32)
+        for i in range(npts):
+            toReg[toCensor[i],i] = 1
         X = np.concatenate((X, toReg), axis=1)
     return X
     
