@@ -26,7 +26,7 @@ import nipype.interfaces.fsl as fsl
 from subprocess import call, check_output, CalledProcessError, getoutput
 import nibabel as nib
 import scipy.io as sio
-from sklearn import cross_validation
+import sklearn.model_selection as cross_validation
 from sklearn import linear_model
 from numpy.polynomial.legendre import Legendre
 from scipy import signal
