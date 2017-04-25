@@ -1274,13 +1274,40 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         disp=dmotpars.copy()
         disp[:,3:]=np.pi*headradius*2*(disp[:,3:]/360)
         score=np.sum(disp,1)
+    elif flavor[0] == 'FD+DVARS':
+        motionFile = op.join(buildpath(config.subject,config.fmriRun), 'Movement_Regressors_dt.txt')
+        dmotpars = np.abs(np.genfromtxt(motionFile)[:,6:]) #derivatives
+        headradius=50 #50mm as in Powers et al. 2012
+        disp=dmotpars.copy()
+        disp[:,3:]=np.pi*headradius*2*(disp[:,3:]/360)
+        score=np.sum(disp,1)
+        # pcSigCh
+        meanImg = np.mean(niiImg,axis=1)[:,np.newaxis]
+        niiImg2 = 100 * (niiImg - meanImg) / meanImg
+        niiImg2[np.where(np.isnan(niiImg2))] = 0
+        dt = np.diff(niiImg2, n=1, axis=1)
+        dt = np.concatenate((np.zeros((dt.shape[0],1),dtype=np.float32), dt), axis=1)
+        scoreDVARS = np.sqrt(np.mean(dt**2,0)) 
+    elif flavor[0] == 'RMS':
+        RelRMSFile = op.join(buildpath(subject, config.fmriRun), 'Movement_RelativeRMS.txt')
+        score = np.loadtxt(RelRMSFile)
     else:
         print 'Wrong scrubbing flavor. Nothing was done'
-        return niiImg
+        return niiImg        
     
-    censored = np.where(score>thr)
+    if flavor[0] == 'FD+DVARS':
+        thr2 = flavor[2]
+        censored = np.where(np.logical_and(score>thr,scoreDVARS>thr2))
+    else:
+        censored = np.where(score>thr)
     
-    if len(flavor)>2:
+    if (len(flavor)>3 and flavor[0] == 'FD+DVARS'):
+        pad = flavor[3]
+        a_minus = [i-k for i in censored[0] for k in range(1, pad+1)]
+        a_plus  = [i+k for i in censored[0] for k in range(1, pad+1)]
+        censored = np.concatenate((censored[0], a_minus, a_plus))
+        censored = np.unique(censored[np.where(np.logical_and(censored>=0, censored<len(score)))])
+    elif len(flavor) > 2 and flavor[0] != 'FD+DVARS':
         pad = flavor[2]
         a_minus = [i-k for i in censored[0] for k in range(1, pad+1)]
         a_plus  = [i+k for i in censored[0] for k in range(1, pad+1)]
