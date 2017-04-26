@@ -2126,7 +2126,7 @@ def runPipeline():
     
         print 'Preprocessing complete. '
         config.fmriFile_dn = op.join(outDir,outFile+config.ext)
-
+    return
 
 def runPipelinePar(launchSubproc=False):
 
@@ -2178,7 +2178,7 @@ def runPipelinePar(launchSubproc=False):
         thispythonfn += 'try:\n    remove(config.fmriFile.replace(".gz",""))\nexcept OSError:\n    pass\n'
         thispythonfn += 'try:\n    remove(config.fmriFile_dn.replace(".gz",""))\nexcept OSError:\n    pass\n'
     if config.isCifti:
-        thispythonfn += 'try:\n    remove(config.fmriFile.replace(".dtseries.nii","*.tsv"))\nexcept OSError:\n    pass\n'
+        thispythonfn += 'for f in glob.glob(config.fmriFile.replace("_Atlas","").replace(".dtseries.nii","*.tsv")): os.remove(f)\n'
     thispythonfn += 'logFid.close()\n'
     thispythonfn += 'END'
 
@@ -2195,13 +2195,18 @@ def runPipelinePar(launchSubproc=False):
     cmd='chmod 774 '+thisScript
     call(cmd,shell=True)
 
+    
     if config.queue:
         # call to fnSubmitToCluster
         # JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={} -l h_cpu={} -q {}'.format(priority,config.maxvmem,60*60*8,config.whichQueue))
         JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={}'.format(priority,config.maxvmem))
         config.joblist.append(JobID)
+        print 'submitted {}'.format(JobID)
+        sys.stdout.flush()
     else:
         if launchSubproc:
+            print 'spawned python subprocess on local machine'
+            sys.stdout.flush()
             call(thisScript,shell=True)
         else:
             runPipeline()
