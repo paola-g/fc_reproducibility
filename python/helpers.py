@@ -1220,7 +1220,9 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
                 if config.doScrubbing:
                     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
                     toCensor = np.loadtxt(op.join(buildpath(), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
-                    npts = len(toCensor)
+                    npts = toCensor.size
+                    if npts==1:
+                        toCensor=np.reshape(toCensor,(npts,))
                     toReg = np.zeros((nTRs, npts),dtype=np.float32)
                     for i in range(npts):
                         toReg[toCensor[i],i] = 1
@@ -1247,7 +1249,9 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
     if config.doScrubbing:
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         toCensor = np.loadtxt(op.join(buildpath(), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
-        npts = len(toCensor)
+        npts = toCensor.size
+        if npts==1:
+            toCensor=np.reshape(toCensor,(npts,))
         toReg = np.zeros((nTRs, npts),dtype=np.float32)
         for i in range(npts):
             toReg[toCensor[i],i] = 1
@@ -2092,7 +2096,7 @@ def runPipeline():
         #print config.fmriFile_dn
 
 
-def runPipelinePar():
+def runPipelinePar(launchSubproc=False):
 
     if config.queue: priority=-100
     config.suffix = '_hp2000_clean' if config.useFIX else '' 
@@ -2132,8 +2136,6 @@ def runPipelinePar():
     thispythonfn += 'config.parcellationFile = "{}"\n'.format(config.parcellationFile)
     thispythonfn += 'config.nParcels         = {}\n'.format(config.nParcels)
     thispythonfn += 'runPipeline()\n'
-    thispythonfn += 'print "Preprocessed file: {}".format(config.fmriFile_dn)\n'
-    thispythonfn += 'sys.stdout.flush()\n'
     thispythonfn += 'makeGrayPlot(False)\n'
     thispythonfn += 'plotFC(False)\n'
     if config.useMemMap:
@@ -2157,10 +2159,16 @@ def runPipelinePar():
 
     if config.queue:
         # call to fnSubmitToCluster
-        JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={} -l h_cpu={} -q {}'.format(priority,config.maxvmem,60*60*8,config.whichQueue))
+        # JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={} -l h_cpu={} -q {}'.format(priority,config.maxvmem,60*60*8,config.whichQueue))
+        JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={}'.format(priority,config.maxvmem))
         config.joblist.append(JobID)
     else:
-        call(thisScript,shell=True)
+        if launchSubproc:
+            call(thisScript,shell=True)
+        else:
+            runPipeline()
+            makeGrayPlot(False)
+            plotFC(False)
 
     return True
 
