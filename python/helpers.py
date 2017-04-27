@@ -5,6 +5,10 @@ class config(object):
     overwrite    = False
     joblist = list()
     useMemMap = False
+    steps = {}
+    Flavors = {}
+    sortedOperations = list()
+    
 
 # Force matplotlib to not use any Xwindows backend.
 import matplotlib
@@ -22,7 +26,7 @@ import nipype.interfaces.fsl as fsl
 from subprocess import call, check_output, CalledProcessError, getoutput
 import nibabel as nib
 import scipy.io as sio
-#from sklearn import cross_validation
+from sklearn import cross_validation
 from sklearn import linear_model
 from numpy.polynomial.legendre import Legendre
 from scipy import signal
@@ -482,7 +486,7 @@ def fnSubmitToCluster(strScript, strJobFolder, strJobUID, resources):
     except OSError: 
         pass    
    
-    strCommand = 'qsub {} -cwd -V {} -N {} -e "{}" -o "{}" "{}"'.format(specifyqueue,resources,strJobUID,
+    strCommand = 'qsub {} -cwd -V {} -N {} -e {} -o {} {}'.format(specifyqueue,resources,strJobUID,
                       op.join(strJobFolder,strJobUID+'.e'), op.join(strJobFolder,strJobUID+'.o'), strScript)
     # write down the command to a file in the job folder
     with open(op.join(strJobFolder,strJobUID+'.cmd'),'w+') as hFileID:
@@ -699,7 +703,7 @@ def prewhitening(niiImg, nTRs, TR, X):
     W = linalg.inv(sqrtm(V))
     return W
 
-def plot_corrs(x,y):
+def plot_corrs(x,y,title=None):
     # fit a curve to the data using a least squares 1st order polynomial fit
     z = np.polyfit(x,y,1)
 
@@ -722,11 +726,10 @@ def plot_corrs(x,y):
     # now calculate confidence intervals for new test x-series
     mean_x = np.mean(x)         # mean of x
     n = len(x)              # number of samples in origional fit
-    DF = n_subj - z.size                            # degrees of freedom
+    DF = n - z.size                            # degrees of freedom
     t = stats.t.ppf(0.95, DF)           # used for CI and PI bands
     s_err = np.sum(np.power(y_err,2))   # sum of the squares of the residuals
 
-    #confs = t * np.sqrt((s_err/(n-2))*(1.0/n + (np.power((p_x-mean_x),2)/((np.sum(np.power(x,2)))-n*(np.power(mean_x,2))))))
     confs = t * np.sqrt((s_err/(n-2)) * (1.0/n + (np.power((p_x-mean_x),2)/(np.sum(np.power(x - mean_x,2))))))
     # now predict y based on test x-values
     p_y = z[0]*p_x+z[1]
@@ -736,11 +739,10 @@ def plot_corrs(x,y):
     upper = p_y + abs(confs)
 
     # set-up the plot
-    #plt.subplots(figsize=(8,8))
     plt.axes().set_aspect('equal')
     plt.xlabel('Original score')
     plt.ylabel('Predicted score')
-    plt.title('Linear regression and confidence limits')
+    plt.title(title)
 
     # plot sample data
     plt.plot(x,y,'bo')
@@ -763,7 +765,7 @@ def plot_corrs(x,y):
     plt.setp(ltext, fontsize=10)
 
     # add text
-    rho,p = stats.pearsonr(np.ravel(predictions_pos),np.squeeze(gF))
+    rho,p = stats.pearsonr(np.ravel(y),np.squeeze(x))
     s = 'r={:0.2f}\np={:1.4f}'.format(rho,p)
     plt.text(20, 7, s, fontsize=12)
 
@@ -1331,7 +1333,12 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
         volData = niiImg[1]
     else:
         volData = niiImg[0]
-    
+
+    # # make a note of number of NaN inside masks
+    # print 'WM : {} elements, {} NaN'.format(np.sum(maskWM_),np.sum(np.isnan(np.sum(volData[maskWM_,:],axis=1))))
+    # print 'CSF: {} elements, {} NaN'.format(np.sum(maskCSF_),np.sum(np.isnan(np.sum(volData[maskCSF_,:],axis=1))))
+    # print 'GM : {} elements, {} NaN'.format(np.sum(maskGM_),np.sum(np.isnan(np.sum(volData[maskGM_,:],axis=1))))
+
     if flavor[0] == 'CompCor':
         X = extract_noise_components(volData, maskWM_, maskCSF_, num_components=flavor[1], flavor=flavor[2])
     elif flavor[0] == 'WMCSF':
@@ -1882,35 +1889,43 @@ def plotFC(displayPlot=False,overwrite=False):
     fcFile_dn = op.join(tsDir,'allParcels_{}_Pearson.txt'.format(rstring))
     fcMat_dn = np.genfromtxt(fcFile_dn,delimiter=",")
     
-    fig = plt.figure(figsize=(20,7.5))
-    ####################
-    # original
-    ####################
-    ax1 = plt.subplot(121)
-    im = plt.imshow(fcMat, aspect='auto', interpolation='none', cmap=plt.cm.jet)
-    im.set_clim(vmin=-.5, vmax=.5)
-    plt.axis('equal')  
-    plt.axis('off')  
-    plt.title('Subject {}, run {}'.format(config.subject,config.fmriRun))
-    plt.xlabel('parcel #')
-    plt.ylabel('parcel #')
-    ####################
-    # denoised
-    ####################
-    ax2 = plt.subplot(122)#, sharey=ax1)
-    im = plt.imshow(fcMat_dn, aspect='auto', interpolation='none', cmap=plt.cm.jet)
-    im.set_clim(vmin=-.5, vmax=.5)
-    plt.axis('equal')  
-    plt.axis('off')  
-    plt.title('{}'.format(config.pipelineName))
-    plt.xlabel('parcel #')
-    plt.ylabel('parcel #')
-    # prettify
-    fig.subplots_adjust(right=0.9)
-    cbar_ax = fig.add_axes([0.92, 0.25, 0.03, 0.5])
-    fig.colorbar(im, cax=cbar_ax)
-    # save figure
-    fig.savefig(savePlotFile, bbox_inches='tight')
+    if not op.isfile(savePlotFile) or overwrite:
+        fig = plt.figure(figsize=(20,7.5))
+        ####################
+        # original
+        ####################
+        ax1 = plt.subplot(121)
+        im = plt.imshow(fcMat, aspect='auto', interpolation='none', cmap=plt.cm.jet)
+        im.set_clim(vmin=-.5, vmax=.5)
+        plt.axis('equal')  
+        plt.axis('off')  
+        plt.title('Subject {}, run {}'.format(config.subject,config.fmriRun))
+        plt.xlabel('parcel #')
+        plt.ylabel('parcel #')
+        ####################
+        # denoised
+        ####################
+        ax2 = plt.subplot(122)#, sharey=ax1)
+        im = plt.imshow(fcMat_dn, aspect='auto', interpolation='none', cmap=plt.cm.jet)
+        im.set_clim(vmin=-.5, vmax=.5)
+        plt.axis('equal')  
+        plt.axis('off')  
+        plt.title('{}'.format(config.pipelineName))
+        plt.xlabel('parcel #')
+        plt.ylabel('parcel #')
+        # prettify
+        fig.subplots_adjust(right=0.9)
+        cbar_ax = fig.add_axes([0.92, 0.25, 0.03, 0.5])
+        fig.colorbar(im, cax=cbar_ax)
+        # save figure
+        fig.savefig(savePlotFile, bbox_inches='tight')
+
+    else:
+        image = mpimg.imread(savePlotFile)
+        fig = plt.figure(figsize=(20,7.5))
+        plt.axis("off")
+        plt.imshow(image)
+    
     #
     if displayPlot:
         plt.show(fig)
@@ -1946,7 +1961,8 @@ def plotQCrsFC(fcMats,fcMats_dn,fdScores):
     plt.scatter(edists[triu_idx], pears, s=.01)
     plt.ylabel('FC-MFD Correlation (r)')
     plt.xlabel('Inter-node Euclidean distance (voxels)')
-    plt.xlim([0,65])
+    plt.title('Original data')
+    plt.xlim([0,80])
     plt.axhline(y=0, color='k')
     plt.plot(fit[:,0],fit[:,1],'blue',linewidth=3)
     ################
@@ -1959,7 +1975,8 @@ def plotQCrsFC(fcMats,fcMats_dn,fdScores):
     plt.scatter(edists[triu_idx], pears, s=.01)
     plt.ylabel('FC-MFD Correlation (r)')
     plt.xlabel('Inter-node Euclidean distance (voxels)')
-    plt.xlim([0,65])
+    plt.title(config.pipelineName)
+    plt.xlim([0,80])
     plt.axhline(y=0, color='k')
     plt.plot(fit[:,0],fit[:,1],'blue',linewidth=3)
     # save figure
@@ -1971,7 +1988,7 @@ def plotDeltaR(fcMats,fcMats_dn):
     savePlotFile=op.join(config.DATADIR,config.pipelineName+'_'+config.parcellationName+'_deltaR.png')
     
     if not config.isCifti:
-        tmpnii = nib.load(config.parcellationName)
+        tmpnii = nib.load(config.parcellationFile)
         nRows, nCols, nSlices = tmpnii.header.get_data_shape()
         # idx_parcels = np.array([np.where(data==i) for i in range(1,config.nParcels+1)])
         idx_parcels = np.array([np.where(np.asarray(tmpnii.dataobj)==i) for i in range(1,config.nParcels+1)])
@@ -1996,7 +2013,7 @@ def plotDeltaR(fcMats,fcMats_dn):
     plt.scatter(edists[triu_idx], edges_dn-edges, s=.01)
     plt.ylabel('deltaR')
     plt.xlabel('Inter-node Euclidean distance (voxels)')
-    plt.xlim([0,65])
+    plt.xlim([0,80])
     plt.axhline(y=0, color='k')
     plt.plot(fit[:,0],fit[:,1],'blue',linewidth=3)
     # save figure
@@ -2005,127 +2022,99 @@ def plotDeltaR(fcMats,fcMats_dn):
 
 #@profile
 def runPipeline():
-    sortedOperations = sorted(config.Operations, key=operator.itemgetter(1))
-    steps = {}
-    Flavors = {}
-    cstep = 0
 
-    # If requested, scrubbing is performed first, before any denoising step
-    scrub_idx = -1
-    curr_idx = -1
-    for opr in sortedOperations:
-        curr_idx = curr_idx+1
-        if opr[0] == 'Scrubbing' and opr[1] != 1 and opr[1] != 0:
-            scrub_idx = opr[1]
-            break
-            
-    if scrub_idx != -1:        
-        for opr in sortedOperations:  
-            if opr[1] != 0 and opr[1] < scrub_idx:
-                opr[1] = opr[1]+1
-
-        sortedOperations[curr_idx][1] = 1
-        sortedOperations = sorted(config.Operations, key=operator.itemgetter(1))
-
-    for opr in sortedOperations:
-        if opr[1]==0:
-            continue
-        else:
-            if opr[1]!=cstep:
-                cstep=cstep+1
-                steps[cstep] = [opr[0]]
-                Flavors[cstep] = [opr[2]]
-            else:
-                steps[cstep].append(opr[0])
-                Flavors[cstep].append(opr[2])
-                            
-    precomputed = checkXML(config.fmriFile,steps,Flavors,buildpath()) 
+    Flavors = config.Flavors
+    print Flavors
+    steps   = config.steps
+    print steps
+    sortedOperations = config.sortedOperations
+    print sortedOperations
     
-    if precomputed and not config.overwrite:
-        #print "{}, {} -- Preprocessing already computed.".format(config.subject, config.fmriRun)
-        config.fmriFile_dn = precomputed
-        #print config.fmriFile_dn
-    else:
-        timeStart = localtime()
-        print 'Step 0 : Building WM, CSF and GM masks...'
-        masks = makeTissueMasks(False)
-        maskAll, maskWM_, maskCSF_, maskGM_ = masks    
+    timeStart = localtime()
+    print 'Step 0 : Building WM, CSF and GM masks...'
+    masks = makeTissueMasks(overwrite=False)
+    maskAll, maskWM_, maskCSF_, maskGM_ = masks    
 
-        if config.isCifti:
-            print 'Loading [volume] data in memory...'
-            # volume
-            volFile = config.fmriFile.replace('_Atlas','').replace('.dtseries.nii','.nii.gz')
-            volData, nRows, nCols, nSlices, nTRs, affine, TR = load_img(volFile, maskAll) 
-            # cifti
-            print 'Loading [cifti] data in memory...'
-            if not op.isfile(config.fmriFile.replace('.dtseries.nii','.tsv')):
-                cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile,config.fmriFile.replace('.dtseries.nii','.tsv'))
-                call(cmd,shell=True)
-            data = np.loadtxt(config.fmriFile.replace('.dtseries.nii','.tsv'),dtype=np.float32)
-        else:
-            print 'Loading [volume] data in memory...'
-            volFile = config.fmriFile
-            data, nRows, nCols, nSlices, nTRs, affine, TR = load_img(volFile, maskAll) 
-            volData = None
-           
-        nsteps = len(steps)
-        for i in range(1,nsteps+1):
-            step = steps[i]
-            print 'Step '+str(i)+' '+str(step)
-            if len(step) == 1:
-                # Atomic operations
-                if 'Regression' in step[0] or ('TemporalFiltering' in step[0] and 'DCT' in Flavors[i][0]) or ('wholebrain' in Flavors[i][0]):
-                    if (step[0]=='TissueRegression' and 'GM' in Flavors[i][0]) or (step[0]=='MotionRegression' and 'nonaggr' in Flavors[i][0]): 
-                        #regression constrained to GM or nonagrr ICA-AROMA
-                        data, volData = Hooks[step[0]]([data,volData], Flavors[i][0], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
-                    else:
-                        r0 = Hooks[step[0]]([data,volData], Flavors[i][0], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
-                        data = regress(data, nTRs, TR, r0, config.preWhitening)
-                else:
-                    data, volData = Hooks[step[0]]([data,volData], Flavors[i][0], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
-            else:
-                # When multiple regression steps have the same order, all the regressors are combined
-                # and a single regression is performed (other operations are executed in order)
-                r = np.empty((nTRs, 0))
-                for j in range(len(step)):
-                    opr = step[j]
-                    if 'Regression' in opr or ('TemporalFiltering' in opr and 'DCT' in Flavors[i][j]) or ('wholebrain' in Flavors[i][j]):
-                        if (opr=='TissueRegression' and 'GM' in Flavors[i][j]) or (opr=='MotionRegression' and 'nonaggr' in Flavors[i][j]): 
-                            #regression constrained to GM or nonaggr ICA-AROMA
-                            data, volData = Hooks[opr]([data,volData], Flavors[i][j], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
-                        else:    
-                            r0 = Hooks[opr]([data,volData], Flavors[i][j], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
-                            r = np.append(r, r0, axis=1)
-                    else:
-                        data, volData = Hooks[opr]([data,volData], Flavors[i][j], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
-                if r.shape[1] > 0:
-                    data = regress(data, nTRs, TR, r, config.preWhitening)    
-            data[np.isnan(data)] = 0
-
-        print 'Done! Copy the resulting file...'
-        rstring = ''.join(random.SystemRandom().choice(string.ascii_lowercase +string.ascii_uppercase + string.digits) for _ in range(8))
-        outDir  = buildpath()
-        outFile = config.fmriRun+'_prepro_'+rstring
-        if config.isCifti:
-            # write to text file
-            np.savetxt(op.join(outDir,outFile+'.tsv'),data, delimiter='\t', fmt='%.6f')
-            # need to convert back to cifti
-            cmd = 'wb_command -cifti-convert -from-text {} {} {}'.format(op.join(outDir,outFile+'.tsv'),
-                                                                         config.fmriFile,
-                                                                         op.join(outDir,outFile+'.dtseries.nii'))
+    if config.isCifti:
+        # volume
+        volFile = config.fmriFile.replace('_Atlas','').replace('.dtseries.nii','.nii.gz')
+        print 'Loading [volume] data in memory... {}'.format(volFile)
+        volData, nRows, nCols, nSlices, nTRs, affine, TR = load_img(volFile, maskAll) 
+        # cifti
+        print 'Loading [cifti] data in memory... {}'.format(config.fmriFile.replace('.dtseries.nii','.tsv'))
+        if not op.isfile(config.fmriFile.replace('.dtseries.nii','.tsv')):
+            cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile,config.fmriFile.replace('.dtseries.nii','.tsv'))
             call(cmd,shell=True)
+        data = np.loadtxt(config.fmriFile.replace('.dtseries.nii','.tsv'),dtype=np.float32)
+    else:
+        volFile = config.fmriFile
+        print 'Loading [volume] data in memory... {}'.format(config.fmriFile)
+        data, nRows, nCols, nSlices, nTRs, affine, TR = load_img(volFile, maskAll) 
+        volData = None
+       
+    nsteps = len(steps)
+    for i in range(1,nsteps+1):
+        step = steps[i]
+        print 'Step '+str(i)+' '+str(step)
+        if len(step) == 1:
+            # Atomic operations
+            if 'Regression' in step[0] or ('TemporalFiltering' in step[0] and 'DCT' in Flavors[i][0]) or ('wholebrain' in Flavors[i][0]):
+                if (step[0]=='TissueRegression' and 'GM' in Flavors[i][0]) or (step[0]=='MotionRegression' and 'nonaggr' in Flavors[i][0]): 
+                    #regression constrained to GM or nonagrr ICA-AROMA
+                    data, volData = Hooks[step[0]]([data,volData], Flavors[i][0], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
+                else:
+                    r0 = Hooks[step[0]]([data,volData], Flavors[i][0], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
+                    data = regress(data, nTRs, TR, r0, config.preWhitening)
+            else:
+                data, volData = Hooks[step[0]]([data,volData], Flavors[i][0], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
         else:
-            niiImg = np.zeros((nRows*nCols*nSlices, nTRs),dtype=np.float32)
-            niiImg[maskAll,:] = data
-            nib.save(nib.Nifti1Image(niiImg.reshape((nRows, nCols, nSlices, nTRs), order='F').astype('<f4'), affine),op.join(outDir,outFile+'.nii.gz'))
+            # When multiple regression steps have the same order, all the regressors are combined
+            # and a single regression is performed (other operations are executed in order)
+            r = np.empty((nTRs, 0))
+            for j in range(len(step)):
+                opr = step[j]
+                if 'Regression' in opr or ('TemporalFiltering' in opr and 'DCT' in Flavors[i][j]) or ('wholebrain' in Flavors[i][j]):
+                    if (opr=='TissueRegression' and 'GM' in Flavors[i][j]) or (opr=='MotionRegression' and 'nonaggr' in Flavors[i][j]): 
+                        #regression constrained to GM or nonaggr ICA-AROMA
+                        data, volData = Hooks[opr]([data,volData], Flavors[i][j], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
+                    else:    
+                        r0 = Hooks[opr]([data,volData], Flavors[i][j], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
+                        r = np.append(r, r0, axis=1)
+                else:
+                    data, volData = Hooks[opr]([data,volData], Flavors[i][j], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
+            if r.shape[1] > 0:
+                data = regress(data, nTRs, TR, r, config.preWhitening)    
+        # TODO: check if this is the correct way of removing NaNs!
+        data[np.isnan(data)] = 0
+        if config.isCifti:
+            volData[np.isnan(volData)] = 0
 
-        timeEnd = localtime()  
 
-        outXML = rstring+'.xml'
-        conf2XML(config.fmriFile, config.DATADIR, sortedOperations, timeStart, timeEnd, op.join(buildpath(),outXML))
-    
-        print 'Preprocessing complete. '
-        config.fmriFile_dn = op.join(outDir,outFile+config.ext)
+    print 'Done! Copy the resulting file...'
+    rstring = ''.join(random.SystemRandom().choice(string.ascii_lowercase +string.ascii_uppercase + string.digits) for _ in range(8))
+    outDir  = buildpath()
+    outFile = config.fmriRun+'_prepro_'+rstring
+    if config.isCifti:
+        # write to text file
+        np.savetxt(op.join(outDir,outFile+'.tsv'),data, delimiter='\t', fmt='%.6f')
+        # need to convert back to cifti
+        cmd = 'wb_command -cifti-convert -from-text {} {} {}'.format(op.join(outDir,outFile+'.tsv'),
+                                                                     config.fmriFile,
+                                                                     op.join(outDir,outFile+'.dtseries.nii'))
+        call(cmd,shell=True)
+    else:
+        niiImg = np.zeros((nRows*nCols*nSlices, nTRs),dtype=np.float32)
+        niiImg[maskAll,:] = data
+        nib.save(nib.Nifti1Image(niiImg.reshape((nRows, nCols, nSlices, nTRs), order='F').astype('<f4'), affine),op.join(outDir,outFile+'.nii.gz'))
+
+    timeEnd = localtime()  
+
+    outXML = rstring+'.xml'
+    conf2XML(config.fmriFile, config.DATADIR, sortedOperations, timeStart, timeEnd, op.join(buildpath(),outXML))
+
+    print 'Preprocessing complete. '
+    config.fmriFile_dn = op.join(outDir,outFile+config.ext)
+
     return
 
 def runPipelinePar(launchSubproc=False):
@@ -2145,75 +2134,168 @@ def runPipelinePar(launchSubproc=False):
         sys.stdout.flush()
         return False
 
-    jobDir = op.join(buildpath(),'jobs')
-    if not op.isdir(jobDir): 
-        mkdir(jobDir)
-    jobName = 's{}_{}'.format(config.subject,config.pipelineName)
+    config.sortedOperations = sorted(config.Operations, key=operator.itemgetter(1))
+    config.steps = {}
+    config.Flavors = {}
+    cstep = 0
 
-    # make a script to load and preprocess that file, then save as .mat
-    thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
-    thispythonfn += 'from helpers import *\n'
-    thispythonfn += 'logFid                  = open("{}","w")\n'.format(op.join(jobDir,jobName+'.log'))
-    thispythonfn += 'sys.stdout              = logFid\n'
-    thispythonfn += 'config.subject          = "{}"\n'.format(config.subject)
-    thispythonfn += 'config.DATADIR          = "{}"\n'.format(config.DATADIR)
-    thispythonfn += 'config.fmriRun          = "{}"\n'.format(config.fmriRun)
-    thispythonfn += 'config.useFIX           = {}\n'.format(config.useFIX)
-    thispythonfn += 'config.pipelineName     = "{}"\n'.format(config.pipelineName)
-    thispythonfn += 'config.overwrite        = {}\n'.format(config.overwrite)
-    thispythonfn += 'config.queue            = {}\n'.format(config.queue)
-    thispythonfn += 'config.preWhitening     = {}\n'.format(config.preWhitening)
-    thispythonfn += 'config.isCifti          = {}\n'.format(config.isCifti)
-    thispythonfn += 'config.Operations       = {}\n'.format(config.Operations)
-    thispythonfn += 'config.suffix           = "{}"\n'.format(config.suffix)
-    thispythonfn += 'config.ext              = "{}"\n'.format(config.ext)
-    thispythonfn += 'config.fmriFile         = "{}"\n'.format(config.fmriFile)
-    thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
-    thispythonfn += 'config.parcellationFile = "{}"\n'.format(config.parcellationFile)
-    thispythonfn += 'config.nParcels         = {}\n'.format(config.nParcels)
-    thispythonfn += 'runPipeline()\n'
-    thispythonfn += 'makeGrayPlot(False)\n'
-    thispythonfn += 'plotFC(False)\n'
-    if config.useMemMap:
-        thispythonfn += 'try:\n    remove(config.fmriFile.replace(".gz",""))\nexcept OSError:\n    pass\n'
-        thispythonfn += 'try:\n    remove(config.fmriFile_dn.replace(".gz",""))\nexcept OSError:\n    pass\n'
-    if config.isCifti:
-        thispythonfn += 'for f in glob.glob(config.fmriFile.replace("_Atlas","").replace(".dtseries.nii","*.tsv")): os.remove(f)\n'
-    thispythonfn += 'logFid.close()\n'
-    thispythonfn += 'END'
+    # If requested, scrubbing is performed first, before any denoising step
+    scrub_idx = -1
+    curr_idx = -1
+    for opr in config.sortedOperations:
+        curr_idx = curr_idx+1
+        if opr[0] == 'Scrubbing' and opr[1] != 1 and opr[1] != 0:
+            scrub_idx = opr[1]
+            break
+            
+    if scrub_idx != -1:        
+        for opr in config.sortedOperations:  
+            if opr[1] != 0 and opr[1] < scrub_idx:
+                opr[1] = opr[1]+1
 
-    # prepare a script
-    thisScript=op.join(jobDir,jobName+'.sh')
-    try:
-        remove(thisScript)
-    except OSError:
-        pass
-	with open(thisScript,'w') as fidw:
+        config.sortedOperations[curr_idx][1] = 1
+        config.sortedOperations = sorted(config.Operations, key=operator.itemgetter(1))
+
+    for opr in config.sortedOperations:
+        if opr[1]==0:
+            continue
+        else:
+            if opr[1]!=cstep:
+                cstep=cstep+1
+                config.steps[cstep] = [opr[0]]
+                config.Flavors[cstep] = [opr[2]]
+            else:
+                config.steps[cstep].append(opr[0])
+                config.Flavors[cstep].append(opr[2])
+                            
+    precomputed = checkXML(config.fmriFile,config.steps,config.Flavors,buildpath()) 
+
+
+    if precomputed and not config.overwrite:
+        do_makeGrayPlot = False
+        do_plotFC = False
+        config.fmriFile_dn = precomputed
+        if not op.isfile(config.fmriFile_dn.replace(config.ext,'_grayplot.png')):
+            do_makeGrayPlot = True
+        if not op.isfile(config.fmriFile_dn.replace(config.ext,'_'+config.parcellationName+'_fcMat.png')):
+            do_plotFC = True
+        if (not do_plotFC) and (not do_makeGrayPlot):
+            return True
+    else:   
+        do_makeGrayPlot = True
+        do_plotFC       = True
+        
+
+    if config.queue or launchSubproc:
+        jobDir = op.join(buildpath(),'jobs')
+        if not op.isdir(jobDir): 
+            mkdir(jobDir)
+        jobName = 's{}_{}_{}_cifti{}'.format(config.subject,config.fmriRun,config.pipelineName,config.isCifti)
+
+        # make a script
+        thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
+        thispythonfn += 'from helpers import *\n'
+        thispythonfn += 'logFid                  = open("{}","a+")\n'.format(op.join(jobDir,jobName+'.log'))
+        thispythonfn += 'sys.stdout              = logFid\n'
+        thispythonfn += 'sys.stderr              = logFid\n'
+        # print date and time stamp
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'print strftime("%Y-%m-%d %H:%M:%S", localtime())\n'
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'config.subject          = "{}"\n'.format(config.subject)
+        thispythonfn += 'config.DATADIR          = "{}"\n'.format(config.DATADIR)
+        thispythonfn += 'config.fmriRun          = "{}"\n'.format(config.fmriRun)
+        thispythonfn += 'config.useFIX           = {}\n'.format(config.useFIX)
+        thispythonfn += 'config.pipelineName     = "{}"\n'.format(config.pipelineName)
+        thispythonfn += 'config.overwrite        = {}\n'.format(config.overwrite)
+        thispythonfn += 'config.queue            = {}\n'.format(config.queue)
+        thispythonfn += 'config.preWhitening     = {}\n'.format(config.preWhitening)
+        thispythonfn += 'config.isCifti          = {}\n'.format(config.isCifti)
+        thispythonfn += 'config.Operations       = {}\n'.format(config.Operations)
+        thispythonfn += 'config.suffix           = "{}"\n'.format(config.suffix)
+        thispythonfn += 'config.ext              = "{}"\n'.format(config.ext)
+        thispythonfn += 'config.fmriFile         = "{}"\n'.format(config.fmriFile)
+        thispythonfn += 'config.Flavors          = {}\n'.format(config.Flavors)
+        thispythonfn += 'config.steps            = {}\n'.format(config.steps)
+        thispythonfn += 'config.sortedOperations = {}\n'.format(config.sortedOperations)
+        thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
+        thispythonfn += 'config.parcellationFile = "{}"\n'.format(config.parcellationFile)
+        thispythonfn += 'config.nParcels         = {}\n'.format(config.nParcels)
+        if precomputed and not config.overwrite:
+            thispythonfn += 'config.fmriFile_dn = "{}"\n'.format(precomputed)
+        else:
+            thispythonfn += 'runPipeline()\n'
+        if do_makeGrayPlot:
+            thispythonfn += 'makeGrayPlot(config.overwrite)\n'
+        if do_plotFC:
+            thispythonfn += 'plotFC(config.overwrite)\n'
+        if config.useMemMap:
+            thispythonfn += 'try:\n    remove(config.fmriFile.replace(".gz",""))\nexcept OSError:\n    pass\n'
+            thispythonfn += 'try:\n    remove(config.fmriFile_dn.replace(".gz",""))\nexcept OSError:\n    pass\n'
+        if config.isCifti:
+            thispythonfn += 'for f in glob.glob(config.fmriFile.replace("_Atlas","").replace(".dtseries.nii","*.tsv")): os.remove(f)\n'
+        thispythonfn += 'logFid.close()\n'
+        thispythonfn += 'END'
+
+        # prepare a script
+        thisScript=op.join(jobDir,jobName+'.sh')
+        while True:
+            if op.isfile(thisScript) and (not config.overwrite):
+                thisScript=thisScript.replace('.sh','+.sh') # use fsl feat convention
+            else:
+                break
+    	
+        with open(thisScript,'w') as fidw:
             fidw.write('#!/bin/bash\n')
             fidw.write('echo ${FSLSUBALREADYRUN}\n')
-            fidw.write('python {}'.format(thispythonfn))
-    cmd='chmod 774 '+thisScript
-    call(cmd,shell=True)
+            fidw.write('python {}\n'.format(thispythonfn))
+        cmd='chmod 774 '+thisScript
+        call(cmd,shell=True)
 
+        #this is a "hack" to make sure the .sh script exists before it is called... 
+        while not op.isfile(thisScript):
+            sleep(.05)
     
-    if config.queue:
-        # call to fnSubmitToCluster
-        # JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={} -l h_cpu={} -q {}'.format(priority,config.maxvmem,60*60*8,config.whichQueue))
-        JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={}'.format(priority,config.maxvmem))
-        config.joblist.append(JobID)
-        print 'submitted {}'.format(JobID)
-        sys.stdout.flush()
-    else:
-        if launchSubproc:
-            print 'spawned python subprocess on local machine'
+        if config.queue:
+            # call to fnSubmitToCluster
+            # JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={} -l h_cpu={} -q {}'.format(priority,config.maxvmem,60*60*8,config.whichQueue))
+            JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={}'.format(priority,config.maxvmem))
+            config.joblist.append(JobID)
+            print 'submitted {} (SGE job #{})'.format(jobName,JobID)
+            sys.stdout.flush()
+        elif launchSubproc:
+            #print 'spawned python subprocess on local machine'
             sys.stdout.flush()
             call(thisScript,shell=True)
+    
+    else:
+    
+        if precomputed and not config.overwrite:
+            config.fmriFile_dn = precomputed
         else:
             runPipeline()
-            makeGrayPlot(False)
-            plotFC(False)
-            if config.isCifti:
-                for f in glob.glob(config.fmriFile.replace('_Atlas','').replace(".dtseries.nii","*.tsv")):
-                    os.remove(f)
+
+        if do_makeGrayPlot:
+            makeGrayPlot(config.overwrite)
+
+        if do_plotFC:
+            plotFC(config.overwrite)
+
+        if config.useMemMap:
+            try: 
+                remove(config.fmriFile.replace(".gz",""))
+            except OSError:
+                pass
+            try:
+                remove(config.fmriFile_dn.replace(".gz",""))
+            except OSError:
+                pass
+        if config.isCifti:
+            for f in glob.glob(config.fmriFile.replace('_Atlas','').replace(".dtseries.nii","*.tsv")):
+                try:
+                    remove(f)
+                except OSError:
+                    pass
+    
     return True
 
