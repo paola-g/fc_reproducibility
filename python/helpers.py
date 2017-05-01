@@ -12,6 +12,7 @@ class config(object):
 
 # Force matplotlib to not use any Xwindows backend.
 import matplotlib
+# core dump with matplotlib 2.0.0; use earlier version, e.g. 1.5.3
 matplotlib.use('Agg')
 
 import matplotlib.pyplot as plt
@@ -772,13 +773,15 @@ def plot_corrs(x,y,title=None):
     # show the plot
     plt.show()
     
-    
+   
 def checkXML(inFile, operations, params, resDir):
     for xfile in listdir(resDir):
         if fnmatch.fnmatch(op.join(resDir,xfile), op.join(resDir,'????????.xml')):
             tree = ET.parse(op.join(resDir,xfile))
             root = tree.getroot()
-            tvalue = root[0][0].text == inFile
+            # print op.basename(root[0][0].text)
+            # print op.basename(inFile)
+            tvalue = op.basename(root[0][0].text) == op.basename(inFile)
             if not tvalue:
                 continue
             for el in root[2]:
@@ -1638,59 +1641,59 @@ def makeGrayPlot(displayPlot=False,overwrite=False):
     savePlotFile = config.fmriFile_dn.replace(config.ext,'_grayplot.png')
     if not op.isfile(savePlotFile) or overwrite:
         # FD
-        t=time()
+        t = time()
         score = computeFD()
-        print "makeGrayPlot -- loaded FD in {:0.2f}s".format(time()-t)
-        sys.stdout.flush()
+        # print "makeGrayPlot -- loaded FD in {:0.2f}s".format(time()-t)
+        # sys.stdout.flush()
         
         if not config.isCifti:
             # load masks
-            t=time()
+            # t=time()
             maskAll, maskWM_, maskCSF_, maskGM_ = makeTissueMasks(False)
-            print "makeGrayPlot -- loaded masks in {:0.2f}s".format(time()-t)
-            sys.stdout.flush()
+            # print "makeGrayPlot -- loaded masks in {:0.2f}s".format(time()-t)
+            # sys.stdout.flush()
             # original volume
-            t=time()
+            # t=time()
             X, nRows, nCols, nSlices, nTRs, affine, TR = load_img(config.fmriFile, maskAll)
-            print "makeGrayPlot -- loaded orig fMRI in {:0.2f}s".format(time()-t)
-            sys.stdout.flush()
+            # print "makeGrayPlot -- loaded orig fMRI in {:0.2f}s".format(time()-t)
+            # sys.stdout.flush()
             # z-score
-            t=time()
+            # t=time()
             X = stats.zscore(X, axis=1, ddof=1)
-            print "makeGrayPlot -- calculated zscore in {:0.2f}s".format(time()-t)
-            sys.stdout.flush()
+            # print "makeGrayPlot -- calculated zscore in {:0.2f}s".format(time()-t)
+            # sys.stdout.flush()
             #X = np.vstack((X[maskGM_,:], X[maskWM_,:], X[maskCSF_,:]))
-            t=time()
+            # t=time()
             Xgm  = X[maskGM_,:]
             Xwm  = X[maskWM_,:]
             Xcsf = X[maskCSF_,:]
-            print "makeGrayPlot -- separated GM, WM, CSF in {:0.2f}s".format(time()-t)
-            sys.stdout.flush()
+            # print "makeGrayPlot -- separated GM, WM, CSF in {:0.2f}s".format(time()-t)
+            # sys.stdout.flush()
         else:
             # cifti
-            t=time()
+            # t=time()
             if not op.isfile(config.fmriFile.replace('.dtseries.nii','.tsv')):
                 cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile,config.fmriFile.replace('.dtseries.nii','.tsv'))
                 call(cmd,shell=True)
-            print "makeGrayPlot -- converted orig cifti fMRI in {:0.2f}s".format(time()-t)
-            t=time()
+            # print "makeGrayPlot -- converted orig cifti fMRI in {:0.2f}s".format(time()-t)
+            # t=time()
             Xgm = np.loadtxt(config.fmriFile.replace('.dtseries.nii','.tsv'),dtype=np.float32)
             nTRs = Xgm.shape[1]
-            print "makeGrayPlot -- loaded orig cifti fMRI in {:0.2f}s".format(time()-t)
-            t=time()
+            # print "makeGrayPlot -- loaded orig cifti fMRI in {:0.2f}s".format(time()-t)
+            # t=time()
             Xgm = stats.zscore(Xgm, axis=1, ddof=1)
-            print "makeGrayPlot -- calculated zscore in {:0.2f}s".format(time()-t)
+            # print "makeGrayPlot -- calculated zscore in {:0.2f}s".format(time()-t)
             
-        t=time()
+        # t=time()
         fig = plt.figure(figsize=(15,20))
         ax1 = plt.subplot(311)
         plt.plot(np.arange(nTRs), score)
         plt.title('Subject {}, run {}, denoising {}'.format(config.subject,config.fmriRun,config.pipelineName))
         plt.ylabel('FD (mm)')
-        print "makeGrayPlot -- plotted FD in {:0.2f}s".format(time()-t)
-        sys.stdout.flush()
+        # print "makeGrayPlot -- plotted FD in {:0.2f}s".format(time()-t)
+        # sys.stdout.flush()
         #
-        t=time()
+        # t=time()
         ax2 = plt.subplot(312, sharex=ax1)
         if not config.isCifti:
             im = plt.imshow(np.vstack((Xgm,Xwm,Xcsf)), aspect='auto', interpolation='none', cmap=plt.cm.gray)
@@ -1702,43 +1705,43 @@ def makeGrayPlot(displayPlot=False,overwrite=False):
         if not config.isCifti:
             plt.axhline(y=np.sum(maskGM_), color='r')
             plt.axhline(y=np.sum(maskGM_)+np.sum(maskWM_), color='b')
-        print "makeGrayPlot -- plotted orig fMRI in {:0.2f}s".format(time()-t)
-        sys.stdout.flush()
+        # print "makeGrayPlot -- plotted orig fMRI in {:0.2f}s".format(time()-t)
+        # sys.stdout.flush()
 
         # denoised volume
         if not config.isCifti:
-            t=time()
+            # t=time()
             X, nRows, nCols, nSlices, nTRs, affine, TR = load_img(config.fmriFile_dn, maskAll)
-            print "makeGrayPlot -- loaded denoised fMRI in {:0.2f}s".format(time()-t)
-            sys.stdout.flush()
+            # print "makeGrayPlot -- loaded denoised fMRI in {:0.2f}s".format(time()-t)
+            # sys.stdout.flush()
             # z-score
-            t=time()
+            # t=time()
             X = stats.zscore(X, axis=1, ddof=1)
-            print "makeGrayPlot -- calculated zscore in {:0.2f}s".format(time()-t)
-            sys.stdout.flush()
+            # print "makeGrayPlot -- calculated zscore in {:0.2f}s".format(time()-t)
+            # sys.stdout.flush()
             #
-            t=time()
+            # t=time()
             Xgm  = X[maskGM_,:]
             Xwm  = X[maskWM_,:]
             Xcsf = X[maskCSF_,:]
-            print "makeGrayPlot -- separated GM, WM, CSF in {:0.2f}s".format(time()-t)
-            sys.stdout.flush()
+            # print "makeGrayPlot -- separated GM, WM, CSF in {:0.2f}s".format(time()-t)
+            # sys.stdout.flush()
         else:
             # cifti
-            t=time()
+            # t=time()
             if not op.isfile(config.fmriFile_dn.replace('.dtseries.nii','.tsv')):
                 cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile_dn,config.fmriFile_dn.replace('.dtseries.nii','.tsv'))
                 call(cmd,shell=True)
-            print "makeGrayPlot -- converted denoised cifti fMRI in {:0.2f}s".format(time()-t)
-            t=time()
+            # print "makeGrayPlot -- converted denoised cifti fMRI in {:0.2f}s".format(time()-t)
+            # t=time()
             Xgm = np.loadtxt(config.fmriFile_dn.replace('.dtseries.nii','.tsv'),dtype=np.float32)
             nTRs = Xgm.shape[1]
-            print "makeGrayPlot -- loaded denoised cifti fMRI in {:0.2f}s".format(time()-t)
-            t=time()
+            # print "makeGrayPlot -- loaded denoised cifti fMRI in {:0.2f}s".format(time()-t)
+            # t=time()
             Xgm = stats.zscore(Xgm, axis=1, ddof=1)
-            print "makeGrayPlot -- calculated zscore in {:0.2f}s".format(time()-t)
+            # print "makeGrayPlot -- calculated zscore in {:0.2f}s".format(time()-t)
         #
-        t=time()
+        # t=time()
         ax3 = plt.subplot(313, sharex=ax1)
         if not config.isCifti:
             im = plt.imshow(np.vstack((Xgm,Xwm,Xcsf)), aspect='auto', interpolation='none', cmap=plt.cm.gray)
@@ -1750,17 +1753,19 @@ def makeGrayPlot(displayPlot=False,overwrite=False):
         if not config.isCifti:
             plt.axhline(y=np.sum(maskGM_), color='r')
             plt.axhline(y=np.sum(maskGM_)+np.sum(maskWM_), color='b')
-        print "makeGrayPlot -- plotted denoised fMRI in {:0.2f}s".format(time()-t)
-        sys.stdout.flush()
+        # print "makeGrayPlot -- plotted denoised fMRI in {:0.2f}s".format(time()-t)
+        # sys.stdout.flush()
 
         # prettify
         fig.subplots_adjust(right=0.9)
         cbar_ax = fig.add_axes([0.92, 0.2, 0.03, 0.4])
         fig.colorbar(im, cax=cbar_ax)
         # save figure
-        t=time()
+        # t=time()
+        # print "makeGrayPlot -- saving figure"
+        # sys.stdout.flush()
         fig.savefig(savePlotFile, bbox_inches='tight',dpi=75)
-        print "makeGrayPlot -- saved figure in {:0.2f}s".format(time()-t)
+        print "makeGrayPlot -- done in {:0.2f}s".format(time()-t)
         sys.stdout.flush()
 
     else:
@@ -2024,11 +2029,11 @@ def plotDeltaR(fcMats,fcMats_dn):
 def runPipeline():
 
     Flavors = config.Flavors
-    print Flavors
+    # print Flavors
     steps   = config.steps
-    print steps
+    # print steps
     sortedOperations = config.sortedOperations
-    print sortedOperations
+    # print sortedOperations
     
     timeStart = localtime()
     print 'Step 0 : Building WM, CSF and GM masks...'
@@ -2259,7 +2264,7 @@ def runPipelinePar(launchSubproc=False):
         if config.queue:
             # call to fnSubmitToCluster
             # JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={} -l h_cpu={} -q {}'.format(priority,config.maxvmem,60*60*8,config.whichQueue))
-            JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={}'.format(priority,config.maxvmem))
+            JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l mem_free={}'.format(priority,config.maxvmem))
             config.joblist.append(JobID)
             print 'submitted {} (SGE job #{})'.format(jobName,JobID)
             sys.stdout.flush()
