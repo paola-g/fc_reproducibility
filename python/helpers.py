@@ -1155,7 +1155,7 @@ def denoising(fslDir, inFile, outDir, melmix, denType, denIdx):
 
 def MotionRegression(niiImg, flavor, masks, imgInfo):
     # assumes that data is organized as in the HCP
-    motionFile = op.join(buildpath(), 'Movement_Regressors_dt.txt')
+    motionFile = op.join(buildpath(), config.movementRegressorsFile)
     data = np.genfromtxt(motionFile)
     if flavor[0] == 'R':
         X = data[:,:6]
@@ -1187,9 +1187,25 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         X = np.concatenate((data, data_squared, data_roll, data_roll_squared, data_roll2, data_roll2_squared), axis=1)
     elif flavor[0] == 'ICA-AROMA':
         fslDir = op.join(environ["FSLDIR"],'bin','')
-        icaOut = op.join(buildpath(), 'rfMRI_REST1_LR_hp2000.ica','filtered_func_data.ica')
+        #icaOut = op.join(buildpath(), 'rfMRI_REST1_LR_hp2000.ica','filtered_func_data.ica')
+        if hasattr(config,'melodicFolder'):
+            icaOut = op.join(buildpath(),config.melodicFolder)
+        else:
+            icaOut = op.join(buildpath(), 'icaOut')
+            try:
+                mkdir(icaOut)
+            except OSError:
+                pass
+            if not op.isfile(op.join(icaOut,'melodic_IC.nii.gz')):
+                os.system(' '.join([os.path.join(fslDir,'melodic'),
+                    '--in=' + config.fmriFile, 
+                    '--outdir=' + icaOut, 
+                    '--dim=' + str(250),
+                    '--Oall --nobet ',
+                    '--tr=' + str(TR)]))
+
         melIC_MNI = op.join(icaOut,'melodic_IC.nii.gz')
-        mc = op.join(buildpath(), 'Movement_Regressors_dt.txt')
+        mc = op.join(buildpath(), config.movementRegressorsFile)
         melmix = op.join(icaOut,'melodic_mix')
         melFTmix = op.join(icaOut,'melodic_FTmix')
         
@@ -1276,14 +1292,14 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         dt = np.concatenate((np.zeros((dt.shape[0],1),dtype=np.float32), dt), axis=1)
         score = np.sqrt(np.mean(dt**2,0))        
     elif flavor[0] == 'FD':
-        motionFile = op.join(buildpath(), 'Movement_Regressors_dt.txt')
+        motionFile = op.join(buildpath(), config.movementRegressorsFile)
         dmotpars = np.abs(np.genfromtxt(motionFile)[:,6:]) #derivatives
         headradius=50 #50mm as in Powers et al. 2012
         disp=dmotpars.copy()
         disp[:,3:]=np.pi*headradius*2*(disp[:,3:]/360)
         score=np.sum(disp,1)
     elif flavor[0] == 'FD+DVARS':
-        motionFile = op.join(buildpath(config.subject,config.fmriRun), 'Movement_Regressors_dt.txt')
+        motionFile = op.join(buildpath(config.subject,config.fmriRun), config.movementRegressorsFile)
         dmotpars = np.abs(np.genfromtxt(motionFile)[:,6:]) #derivatives
         headradius=50 #50mm as in Powers et al. 2012
         disp=dmotpars.copy()
@@ -1297,7 +1313,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         dt = np.concatenate((np.zeros((dt.shape[0],1),dtype=np.float32), dt), axis=1)
         scoreDVARS = np.sqrt(np.mean(dt**2,0)) 
     elif flavor[0] == 'RMS':
-        RelRMSFile = op.join(buildpath(subject, config.fmriRun), 'Movement_RelativeRMS.txt')
+        RelRMSFile = op.join(buildpath(subject, config.fmriRun), config.movementRelativeRMSFile)
         score = np.loadtxt(RelRMSFile)
     else:
         print 'Wrong scrubbing flavor. Nothing was done'
@@ -1629,7 +1645,7 @@ def is_outlier(points, thresh=3.5):
 
 def computeFD():
     # Frame displacement
-    motionFile = op.join(buildpath(), 'Movement_Regressors_dt.txt')
+    motionFile = op.join(buildpath(), config.movementRegressorsFile)
     dmotpars = np.abs(np.genfromtxt(motionFile)[:,6:]) #derivatives
     headradius=50 #50mm as in Powers et al. 2012
     disp=dmotpars.copy()
