@@ -2242,9 +2242,9 @@ def runPipelinePar(launchSubproc=False):
         thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
         thispythonfn += 'config.parcellationFile = "{}"\n'.format(config.parcellationFile)
         thispythonfn += 'config.nParcels         = {}\n'.format(config.nParcels)
-        if hasattr(config, 'melodicFolder'): thispythonfn += 'config.melodicFolder    = {}\n'.format(config.melodicFolder)
-        thispythonfn += 'config.movementRegressorsFile      = {}\n'.format(config.movementRegressorsFile)
-        thispythonfn += 'config.movementRelativeRMSFile         = {}\n'.format(config.movementRelativeRMSFile)
+        if hasattr(config, 'melodicFolder'): thispythonfn += 'config.melodicFolder    = "{}"\n'.format(config.melodicFolder)
+        thispythonfn += 'config.movementRegressorsFile      = "{}"\n'.format(config.movementRegressorsFile)
+        thispythonfn += 'config.movementRelativeRMSFile         = "{}"\n'.format(config.movementRelativeRMSFile)
         if precomputed and not config.overwrite:
             thispythonfn += 'config.fmriFile_dn = "{}"\n'.format(precomputed)
         else:
