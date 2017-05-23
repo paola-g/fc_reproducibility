@@ -2242,6 +2242,9 @@ def runPipelinePar(launchSubproc=False):
         thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
         thispythonfn += 'config.parcellationFile = "{}"\n'.format(config.parcellationFile)
         thispythonfn += 'config.nParcels         = {}\n'.format(config.nParcels)
+        if hasattr(config, 'melodicFolder'): thispythonfn += 'config.melodicFolder    = {}\n'.format(config.melodicFolder)
+        thispythonfn += 'config.MovementRegressorsFile      = {}\n'.format(config.MovementRegressorsFile)
+        thispythonfn += 'config.MovementRelativeRMSFile         = {}\n'.format(config.MovementRelativeRMSFile)
         if precomputed and not config.overwrite:
             thispythonfn += 'config.fmriFile_dn = "{}"\n'.format(precomputed)
         else:
@@ -2280,7 +2283,7 @@ def runPipelinePar(launchSubproc=False):
         if config.queue:
             # call to fnSubmitToCluster
             # JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={} -l h_cpu={} -q {}'.format(priority,config.maxvmem,60*60*8,config.whichQueue))
-            JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l mem_free={}'.format(priority,config.maxvmem))
+            JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(priority,config.sgeopts))
             config.joblist.append(JobID)
             print 'submitted {} (SGE job #{})'.format(jobName,JobID)
             sys.stdout.flush()
