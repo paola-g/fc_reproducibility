@@ -787,11 +787,11 @@ def checkXML(inFile, operations, params, resDir):
             for el in root[2]:
                 tvalue = tvalue and (el.attrib['name'] in operations[int(el[0].text)])
                 tvalue = tvalue and (el[1].text in [repr(param) for param in params[int(el[0].text)]])
-                if not tvalue:
-                    continue
-                else:    
-                    rcode = xfile.replace('.xml','')
-                    return op.join(resDir,config.fmriRun+'_prepro_'+rcode+config.ext)
+            if not tvalue:
+                continue
+            else:    
+                rcode = xfile.replace('.xml','')
+                return op.join(resDir,config.fmriRun+'_prepro_'+rcode+config.ext)
     return None
 
 def get_rcode(mystring):
@@ -2190,6 +2190,7 @@ def runPipelinePar(launchSubproc=False):
                 config.Flavors[cstep].append(opr[2])
                             
     precomputed = checkXML(config.fmriFile,config.steps,config.Flavors,buildpath()) 
+
 
 
     if precomputed and not config.overwrite:
