@@ -784,6 +784,8 @@ def checkXML(inFile, operations, params, resDir):
             tvalue = op.basename(root[0][0].text) == op.basename(inFile)
             if not tvalue:
                 continue
+            if len(root[2]) != np.sum([len(ops) for ops in operations.values()]):
+                continue
             for el in root[2]:
                 tvalue = tvalue and (el.attrib['name'] in operations[int(el[0].text)])
                 tvalue = tvalue and (el[1].text in [repr(param) for param in params[int(el[0].text)]])
