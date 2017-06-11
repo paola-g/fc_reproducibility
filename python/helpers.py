@@ -1301,7 +1301,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         disp[:,3:]=np.pi*headradius*2*(disp[:,3:]/360)
         score=np.sum(disp,1)
     elif flavor[0] == 'FD+DVARS':
-        motionFile = op.join(buildpath(config.subject,config.fmriRun), config.movementRegressorsFile)
+        motionFile = op.join(buildpath(), config.movementRegressorsFile)
         dmotpars = np.abs(np.genfromtxt(motionFile)[:,6:]) #derivatives
         headradius=50 #50mm as in Powers et al. 2012
         disp=dmotpars.copy()
@@ -1315,7 +1315,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         dt = np.concatenate((np.zeros((dt.shape[0],1),dtype=np.float32), dt), axis=1)
         scoreDVARS = np.sqrt(np.mean(dt**2,0)) 
     elif flavor[0] == 'RMS':
-        RelRMSFile = op.join(buildpath(subject, config.fmriRun), config.movementRelativeRMSFile)
+        RelRMSFile = op.join(buildpath(), config.movementRelativeRMSFile)
         score = np.loadtxt(RelRMSFile)
     else:
         print 'Wrong scrubbing flavor. Nothing was done'
