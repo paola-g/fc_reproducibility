@@ -133,7 +133,7 @@ config.operationDict = {
         ['Detrending',              2, ['poly', 2, 'wholebrain']],
         ['TemporalFiltering',       3, ['Butter', 0.01, 0.08]],
         ['MotionRegression',        4, ['R dR']],
-        ['TissueRegression',        4, ['CompCor', 5, 'WM+CSF']],
+        ['TissueRegression',        4, ['CompCor', 5, 'WM+CSF','wholebrain']],
         ['GlobalSignalRegression',  4, ['GS+dt+sq']]
         ],
     'Ciric13': [
@@ -158,7 +158,7 @@ config.operationDict = {
     'SiegelB': [
         ['VoxelNormalization',      1, ['demean']],
         ['Detrending',              2, ['poly', 1, 'wholebrain']],
-        ['TissueRegression',        3, ['CompCor', 5, 'WMCSF']],
+        ['TissueRegression',        3, ['CompCor', 5, 'WMCSF', 'wholebrain']],
         ['TissueRegression',        3, ['GM', 'wholebrain']], 
         ['GlobalSignalRegression',  3, ['GS']],
         ['Scrubbing',               3, ['FD+DVARS', 0.025, 5]], #missing
