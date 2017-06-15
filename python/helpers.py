@@ -2248,8 +2248,7 @@ def runPipelinePar(launchSubproc=False):
         thispythonfn += 'config.parcellationFile = "{}"\n'.format(config.parcellationFile)
         thispythonfn += 'config.nParcels         = {}\n'.format(config.nParcels)
         if hasattr(config, 'melodicFolder'): 
-            config.melodicFolder = config.melodicFolder.replace('#fMRIrun#', config.fmriRun)
-            thispythonfn += 'config.melodicFolder    = "{}"\n'.format(config.melodicFolder)
+            thispythonfn += 'config.melodicFolder    = "{}"\n'.format(config.melodicFolder.replace('#fMRIrun#', config.fmriRun))
         thispythonfn += 'config.movementRegressorsFile      = "{}"\n'.format(config.movementRegressorsFile)
         thispythonfn += 'config.movementRelativeRMSFile         = "{}"\n'.format(config.movementRelativeRMSFile)
         if precomputed and not config.overwrite:
@@ -2307,6 +2306,8 @@ def runPipelinePar(launchSubproc=False):
             if hasattr(config, 'melodicFolder'): 
                 config.melodicFolder = config.melodicFolder.replace('#fMRIrun#', config.fmriRun)
             runPipeline()
+            if hasattr(config, 'melodicFolder'): 
+                config.melodicFolder = config.melodicFolder.replace(config.fmriRun,'#fMRIrun#')
 
         if do_makeGrayPlot:
             makeGrayPlot(config.overwrite)
