@@ -971,6 +971,7 @@ def feature_spatial(fslDir, tempDir, aromaDir, melIC):
     csfFract:   Array of the CSF fraction feature scores for the components of the melIC file"""
 
     # Get the number of ICs
+    print melIC
     numICs = int(getoutput('%sfslinfo %s | grep dim4 | head -n1 | awk \'{print $2}\'' % (fslDir, melIC) ))
 
     # Loop over ICs
@@ -1188,6 +1189,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         data_roll2_squared = data_roll2 ** 2
         X = np.concatenate((data, data_squared, data_roll, data_roll_squared, data_roll2, data_roll2_squared), axis=1)
     elif flavor[0] == 'ICA-AROMA':
+        nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         fslDir = op.join(environ["FSLDIR"],'bin','')
         #icaOut = op.join(buildpath(), 'rfMRI_REST1_LR_hp2000.ica','filtered_func_data.ica')
         if hasattr(config,'melodicFolder'):
@@ -2245,7 +2247,9 @@ def runPipelinePar(launchSubproc=False):
         thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
         thispythonfn += 'config.parcellationFile = "{}"\n'.format(config.parcellationFile)
         thispythonfn += 'config.nParcels         = {}\n'.format(config.nParcels)
-        if hasattr(config, 'melodicFolder'): thispythonfn += 'config.melodicFolder    = "{}"\n'.format(config.melodicFolder)
+        if hasattr(config, 'melodicFolder'): 
+            config.melodicFolder = config.melodicFolder.replace('#fMRIrun#', config.fmriRun)
+            thispythonfn += 'config.melodicFolder    = "{}"\n'.format(config.melodicFolder)
         thispythonfn += 'config.movementRegressorsFile      = "{}"\n'.format(config.movementRegressorsFile)
         thispythonfn += 'config.movementRelativeRMSFile         = "{}"\n'.format(config.movementRelativeRMSFile)
         if precomputed and not config.overwrite:
@@ -2300,6 +2304,8 @@ def runPipelinePar(launchSubproc=False):
         if precomputed and not config.overwrite:
             config.fmriFile_dn = precomputed
         else:
+            if hasattr(config, 'melodicFolder'): 
+                config.melodicFolder = config.melodicFolder.replace('#fMRIrun#', config.fmriRun)
             runPipeline()
 
         if do_makeGrayPlot:
