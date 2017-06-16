@@ -971,7 +971,6 @@ def feature_spatial(fslDir, tempDir, aromaDir, melIC):
     csfFract:   Array of the CSF fraction feature scores for the components of the melIC file"""
 
     # Get the number of ICs
-    print melIC
     numICs = int(getoutput('%sfslinfo %s | grep dim4 | head -n1 | awk \'{print $2}\'' % (fslDir, melIC) ))
 
     # Loop over ICs
@@ -1218,7 +1217,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         HFC = feature_frequency(melFTmix, TR)
         motionICs = classification(icaOut, maxRPcorr, edgeFract, HFC, csfFract)
         
-        if len(motionICs) > 0:
+        if motionICs.ndim > 0:
             melmix = op.join(icaOut,'melodic_mix')
             if len(flavor)>1:
                 denType = flavor[1]
@@ -1262,7 +1261,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         X = data
         
     # if filtering has already been performed, regressors need to be filtered too
-    if len(config.filtering)>0 and len(motionICs) > 0:
+    if len(config.filtering)>0 and motionICs.ndim > 0:
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         X = filter_regressors(X, config.filtering, nTRs, TR)  
         
