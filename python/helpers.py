@@ -1255,13 +1255,14 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
                 X = np.loadtxt(melmix)[:,motionICs]
         else:
             print 'ICA-AROMA: None of the components was classified as motion, so no denoising is applied.'
+            X = np.empty((nTRs, 0))
             
     else:
         print 'Wrong flavor, using default regressors: R dR'
         X = data
         
     # if filtering has already been performed, regressors need to be filtered too
-    if len(config.filtering)>0:
+    if len(config.filtering)>0 and len(motionICs) > 0:
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         X = filter_regressors(X, config.filtering, nTRs, TR)  
         
@@ -1417,7 +1418,6 @@ def TissueRegression(niiImg, flavor, masks, imgInfo):
     else:
         print 'Warning! Wrong tissue regression flavor. Nothing was done'
     
-        
     if flavor[-1] == 'GM':
         if config.isCifti:
             niiImgGM = niiImg[0]
@@ -2084,7 +2084,8 @@ def runPipeline():
         if len(step) == 1:
             # Atomic operations
             if 'Regression' in step[0] or ('TemporalFiltering' in step[0] and 'DCT' in Flavors[i][0]) or ('wholebrain' in Flavors[i][0]):
-                if (step[0]=='TissueRegression' and 'GM' in Flavors[i][0]) or (step[0]=='MotionRegression' and 'nonaggr' in Flavors[i][0]): 
+                if ((step[0]=='TissueRegression' and 'GM' in Flavors[i][0] and 'wholebrain' not in Flavors[i][0]) or
+                   (step[0]=='MotionRegression' and 'nonaggr' in Flavors[i][0])): 
                     #regression constrained to GM or nonagrr ICA-AROMA
                     data, volData = Hooks[step[0]]([data,volData], Flavors[i][0], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
                 else:
@@ -2099,7 +2100,8 @@ def runPipeline():
             for j in range(len(step)):
                 opr = step[j]
                 if 'Regression' in opr or ('TemporalFiltering' in opr and 'DCT' in Flavors[i][j]) or ('wholebrain' in Flavors[i][j]):
-                    if (opr=='TissueRegression' and 'GM' in Flavors[i][j]) or (opr=='MotionRegression' and 'nonaggr' in Flavors[i][j]): 
+                    if ((opr=='TissueRegression' and 'GM' in Flavors[i][j] and 'wholebrain' not in Flavors[i][j]) or
+                       (opr=='MotionRegression' and 'nonaggr' in Flavors[i][j])): 
                         #regression constrained to GM or nonaggr ICA-AROMA
                         data, volData = Hooks[opr]([data,volData], Flavors[i][j], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
                     else:    
