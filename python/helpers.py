@@ -1261,7 +1261,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         X = data
         
     # if filtering has already been performed, regressors need to be filtered too
-    if len(config.filtering)>0 and motionICs.ndim > 0:
+    if len(config.filtering)>0 and X.size > 0:
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         X = filter_regressors(X, config.filtering, nTRs, TR)  
         
