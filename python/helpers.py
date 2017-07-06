@@ -2005,7 +2005,7 @@ def plotQCrsFC(fcMats,fcMats_dn,fdScores):
     plt.plot(fit[:,0],fit[:,1],'blue',linewidth=3)
     # save figure
     fig.savefig(savePlotFile, bbox_inches='tight')
-    plt.show(fig)
+    #plt.show(fig)
 
 def plotDeltaR(fcMats,fcMats_dn):
 
@@ -2042,7 +2042,7 @@ def plotDeltaR(fcMats,fcMats_dn):
     plt.plot(fit[:,0],fit[:,1],'blue',linewidth=3)
     # save figure
     fig.savefig(savePlotFile, bbox_inches='tight')
-    plt.show(fig)
+    #plt.show(fig)
 
 #@profile
 def runPipeline():
@@ -2155,6 +2155,71 @@ def runPipelinePar(launchSubproc=False):
         config.fmriFile = op.join(buildpath(), config.fmriRun+'_Atlas'+config.suffix+'.dtseries.nii')
     else:
         config.fmriFile = op.join(buildpath(), config.fmriRun+config.suffix+'.nii.gz')
+
+    if config.useFIX and not op.isfile(config.fmriFile):
+        if op.isfile(op.join(buildpath(), config.fmriRun+'.nii.gz')):
+            volFile = op.join(buildpath(), config.fmriRun+'.nii.gz')
+            img = nib.load(volFile)
+            TR = img.header.structarr['pixdim'][4]
+            hptr = 2000 / 2 / TR
+            cmd = 'fslmaths {} -bptf {} -1 {}'.format(volFile, hptr, config.fmriFile)
+            call(cmd,shell=True)
+   
+            if hasattr(config,'melodicFolder') and op.isfile(op.join(config.melodicFolder,'mask.nii.gz')):
+                icaOut = op.join(buildpath(),config.melodicFolder)
+            else:
+                icaOut = op.join(buildpath(), 'filtered_func_data.ica')
+                try:
+                    mkdir(icaOut)
+                except OSError:
+                    pass
+                finally:
+                    config.melodicFolder = icaOut
+                if not op.isfile(op.join(icaOut,'melodic_IC.nii.gz')):
+                    fslDir = op.join(environ["FSLDIR"],'bin','')
+                    os.system(' '.join([os.path.join(fslDir,'melodic'),
+                        '--in=' + config.fmriFile, 
+                        '--outdir=' + icaOut, 
+                        '--dim=' + str(250),
+                        '--Oall --nobet ',
+                        '--tr=' + str(TR)]))
+            returnHere = os.getcwd()
+            os.chdir(buildpath())
+            cmd = 'imln {} filtered_func_data'.format(config.fmriFile)
+            if call(cmd, shell=True): sys.exit()
+            cmd = 'imln {} mask'.format(op.join(icaOut,'mask'))
+            if call(cmd, shell=True): sys.exit()
+            if config.isCifti:
+                cmd = 'imln {} Atlas.dtseries.nii'.format(config.fmriFile)
+                if call(cmd, shell=True): sys.exit()
+            cmd = 'imln {} mean_func'.format(op.join(icaOut, 'mean'))
+            if call(cmd, shell=True): sys.exit()
+            if not op.isdir(op.join(buildpath(), 'mc')): mkdir(op.join(buildpath(), 'mc'))
+            cmd = 'cat {} | awk \'{{ print $4 " " $5 " " $6 " " $1 " " $2 " " $3}}\' > {}/prefiltered_func_data_mcf.par'.format(config.movementRegressorsFile,'mc')
+            if call(cmd, shell=True): sys.exit()
+            cmd = '{} -l .fix.functionmotionconfounds.log -f functionmotionconfounds {} 2000 -z {}'.format(op.join(config.FIXDIR,'call_matlab.sh'), TR, check_output('which matlab', shell=True).strip())
+
+            if call(cmd, shell=True): sys.exit()
+            if not op.isdir(op.join(buildpath(), 'reg')): mkdir(op.join(buildpath(), 'reg'))
+            cmd = 'imln {} reg/highres'.format(op.join(config.DATADIR, config.subject, 'MNINonLinear', 'T1w_restore_brain.nii.gz'))
+            #cmd = 'imln {} reg/highres'.format(op.join(config.DATADIR, config.subject, 'MNINonLinear', config.T1w_brain))
+            if call(cmd, shell=True): sys.exit()
+            cmd = 'imln {} reg/wmparc'.format(op.join(config.DATADIR, config.subject, 'MNINonLinear', 'wmparc.nii.gz'))
+            #cmd = 'imln {} reg/wmparc'.format(op.join(config.DATADIR, config.subject, 'MNINonLinear', config.wmparc))
+            if call(cmd, shell=True): sys.exit()
+            cmd = 'imln {} reg/example_func'.format(op.join(buildpath(), 'mean_func'))
+            if call(cmd, shell=True): sys.exit()
+            cmd = 'flirt -in reg/highres -ref reg/example_func -out reg/highres2example_func -omat reg/highres2example_func.mat'
+            if call(cmd, shell=True): sys.exit()
+            cmd = '{}/fix {} {}/training_files/HCP_hp2000.RData 10 -m -h 2000'.format(config.FIXDIR, buildpath(), config.FIXDIR)
+            #cmd = '{}/fix {} {} 10 -m -h 2000'.format(config.FIXDIR, config.FIXtraining, config.FIXDIR)
+            if call(cmd, shell=True): sys.exit()
+            cmd = 'immv {}/filtered_func_data_clean '.format(icaOut, config.fmriFile.replace('.nii.gz', '_clean.nii.gz'))
+            if config.isCifti:
+                cmd = 'mv {}/filtered_func_data_clean '.format(icaOut, config.fmriFile.replace('.dtseries.nii', '_clean.dtseries.nii')) 
+                if call(cmd, shell=True): sys.exit()
+            os.chdir(returnHere)
+
     if not op.isfile(config.fmriFile):
         print config.subject, 'missing'
         sys.stdout.flush()
