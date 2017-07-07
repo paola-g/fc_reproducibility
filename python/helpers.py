@@ -2214,9 +2214,10 @@ def runPipelinePar(launchSubproc=False):
             cmd = '{}/fix {} {}/training_files/HCP_hp2000.RData 10 -m -h 2000'.format(config.FIXDIR, buildpath(), config.FIXDIR)
             #cmd = '{}/fix {} {} 10 -m -h 2000'.format(config.FIXDIR, config.FIXtraining, config.FIXDIR)
             if call(cmd, shell=True): sys.exit()
-            cmd = 'immv {}/filtered_func_data_clean '.format(icaOut, config.fmriFile.replace('.nii.gz', '_clean.nii.gz'))
+            cmd = 'immv filtered_func_data_clean {}'.format(config.fmriFile)
+            if call(cmd, shell=True): sys.exit()
             if config.isCifti:
-                cmd = 'mv {}/filtered_func_data_clean '.format(icaOut, config.fmriFile.replace('.dtseries.nii', '_clean.dtseries.nii')) 
+                cmd = 'mv filtered_func_data_clean {}'.format(config.fmriFile) 
                 if call(cmd, shell=True): sys.exit()
             os.chdir(returnHere)
 
