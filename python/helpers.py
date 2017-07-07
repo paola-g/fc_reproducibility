@@ -2159,11 +2159,13 @@ def runPipelinePar(launchSubproc=False):
     if config.useFIX and not op.isfile(config.fmriFile):
         if op.isfile(op.join(buildpath(), config.fmriRun+'.nii.gz')):
             volFile = op.join(buildpath(), config.fmriRun+'.nii.gz')
+            hpFile = volFile.replace('.nii.gz', '_hp2000.nii.gz')
             img = nib.load(volFile)
             TR = img.header.structarr['pixdim'][4]
             hptr = 2000 / 2 / TR
-            cmd = 'fslmaths {} -bptf {} -1 {}'.format(volFile, hptr, config.fmriFile)
-            call(cmd,shell=True)
+            if not op.isfile(hpFile):
+                cmd = 'fslmaths {} -bptf {} -1 {}'.format(volFile, hptr, hpFile)
+                call(cmd,shell=True)
    
             if hasattr(config,'melodicFolder') and op.isfile(op.join(config.melodicFolder,'mask.nii.gz')):
                 icaOut = op.join(buildpath(),config.melodicFolder)
@@ -2178,19 +2180,19 @@ def runPipelinePar(launchSubproc=False):
                 if not op.isfile(op.join(icaOut,'melodic_IC.nii.gz')):
                     fslDir = op.join(environ["FSLDIR"],'bin','')
                     os.system(' '.join([os.path.join(fslDir,'melodic'),
-                        '--in=' + config.fmriFile, 
+                        '--in=' + hpFile, 
                         '--outdir=' + icaOut, 
                         '--dim=' + str(250),
                         '--Oall --nobet ',
                         '--tr=' + str(TR)]))
             returnHere = os.getcwd()
             os.chdir(buildpath())
-            cmd = 'imln {} filtered_func_data'.format(config.fmriFile)
+            cmd = 'imln {} filtered_func_data'.format(hpFile)
             if call(cmd, shell=True): sys.exit()
             cmd = 'imln {} mask'.format(op.join(icaOut,'mask'))
             if call(cmd, shell=True): sys.exit()
-            if config.isCifti:
-                cmd = 'imln {} Atlas.dtseries.nii'.format(config.fmriFile)
+            if config.isCifti and op.isfile(volFile.replace('.nii.gz', '_Atlas.dtseries.nii')):
+                cmd = 'imln {} Atlas.dtseries.nii'.format(volFile.replace('.nii.gz', '_Atlas.dtseries.nii'))
                 if call(cmd, shell=True): sys.exit()
             cmd = 'imln {} mean_func'.format(op.join(icaOut, 'mean'))
             if call(cmd, shell=True): sys.exit()
@@ -2214,10 +2216,10 @@ def runPipelinePar(launchSubproc=False):
             cmd = '{}/fix {} {}/training_files/HCP_hp2000.RData 10 -m -h 2000'.format(config.FIXDIR, buildpath(), config.FIXDIR)
             #cmd = '{}/fix {} {} 10 -m -h 2000'.format(config.FIXDIR, config.FIXtraining, config.FIXDIR)
             if call(cmd, shell=True): sys.exit()
-            cmd = 'immv filtered_func_data_clean {}'.format(config.fmriFile)
+            cmd = 'immv filtered_func_data_clean {}'.format(hpFile.replace('.nii.gz', '_clean_pg.nii.gz'))
             if call(cmd, shell=True): sys.exit()
             if config.isCifti:
-                cmd = 'mv filtered_func_data_clean {}'.format(config.fmriFile) 
+                cmd = 'mv Atlas_clean.dtseries.nii {}'.format(config.fmriFile) 
                 if call(cmd, shell=True): sys.exit()
             os.chdir(returnHere)
 
