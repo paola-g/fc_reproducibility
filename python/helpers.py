@@ -1979,8 +1979,8 @@ def plotFC(displayPlot=False,overwrite=False):
 
     return fcMat,fcMat_dn
 
-def plotQCrsFC(fcMats,fcMats_dn,fdScores):
-    savePlotFile=op.join(config.DATADIR,config.pipelineName+'_'+config.parcellationName+'_MFDrsFCplot.png')
+def plotQCrsFC(fcMats,fcMats_dn,fdScores,idcode=''):
+    savePlotFile=op.join(config.DATADIR,'{}_{}_{}_MFDrsFCplot.png'.format(config.pipelineName,config.parcellationName,idcode))
     if not config.isCifti:
         tmpnii = nib.load(config.parcellationFile)
         nRows, nCols, nSlices = tmpnii.header.get_data_shape()
@@ -2028,9 +2028,8 @@ def plotQCrsFC(fcMats,fcMats_dn,fdScores):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 
-def plotDeltaR(fcMats,fcMats_dn):
-
-    savePlotFile=op.join(config.DATADIR,config.pipelineName+'_'+config.parcellationName+'_deltaR.png')
+def plotDeltaR(fcMats,fcMats_dn, idcode=''):
+    savePlotFile=op.join(config.DATADIR,'{}_{}_{}_deltaR.png'.format(config.pipelineName,config.parcellationName,idcode))
     
     if not config.isCifti:
         tmpnii = nib.load(config.parcellationFile)
