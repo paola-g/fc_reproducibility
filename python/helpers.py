@@ -49,6 +49,7 @@ from past.utils import old_div
 import os
 import glob
 from statsmodels.nonparametric.smoothers_lowess import lowess
+from scipy.ndimage.morphology import binary_closing, binary_dilation, binary_erosion, binary_opening, generate_binary_structure
 #from memory_profiler import profile
 #import multiprocessing as mp
 
@@ -282,6 +283,8 @@ def makeTissueMasks(overwrite=False):
     WMmaskFileout = op.join(buildpath(), 'WMmask.nii')
     CSFmaskFileout = op.join(buildpath(), 'CSFmask.nii')
     GMmaskFileout = op.join(buildpath(), 'GMmask.nii')
+    OUTmaskFileout = op.join(buildpath(), 'OUTmask.nii')
+    EDGEmaskFileout = op.join(buildpath(), 'EDGEmask.nii')
     
     if not op.isfile(GMmaskFileout) or overwrite:
         # load ribbon.nii.gz and wmparc.nii.gz
@@ -359,32 +362,50 @@ def makeTissueMasks(overwrite=False):
         call(cmd,shell=True)
         
         
-    tmpnii = nib.load(WMmaskFileout)
+    tmpWM = nib.load(WMmaskFileout)
     # myoffset = tmpnii.dataobj.offset
     # data = np.memmap(WMmaskFileout, dtype=tmpnii.header.get_data_dtype(), mode='r', order='F',
     #                  offset=myoffset,shape=tmpnii.header.get_data_shape())
-    nRows, nCols, nSlices = tmpnii.header.get_data_shape()
+    nRows, nCols, nSlices = tmpWM.header.get_data_shape()
     # maskWM = np.reshape(data > 0,nRows*nCols*nSlices, order='F')
-    maskWM = np.asarray(tmpnii.dataobj).reshape(nRows*nCols*nSlices, order='F') > 0
+    maskWM = np.asarray(tmpWM.dataobj).reshape(nRows*nCols*nSlices, order='F') > 0
 
-    tmpnii = nib.load(CSFmaskFileout)
+    tmpCSF = nib.load(CSFmaskFileout)
     # myoffset = tmpnii.dataobj.offset
     # data = np.memmap(CSFmaskFileout, dtype=tmpnii.header.get_data_dtype(), mode='r', order='F', 
     #                  offset=myoffset,shape=tmpnii.header.get_data_shape())
     # maskCSF = np.reshape(data > 0,nRows*nCols*nSlices, order='F')
-    maskCSF = np.asarray(tmpnii.dataobj).reshape(nRows*nCols*nSlices, order='F')  > 0
+    maskCSF = np.asarray(tmpCSF.dataobj).reshape(nRows*nCols*nSlices, order='F')  > 0
 
-    tmpnii = nib.load(GMmaskFileout)
+    tmpGM = nib.load(GMmaskFileout)
     # myoffset = tmpnii.dataobj.offset
     # data = np.memmap(GMmaskFileout, dtype=tmpnii.header.get_data_dtype(), mode='r', order='F', 
     #                  offset=myoffset,shape=tmpnii.header.get_data_shape())
     # maskGM = np.reshape(data > 0,nRows*nCols*nSlices, order='F')
-    maskGM = np.asarray(tmpnii.dataobj).reshape(nRows*nCols*nSlices, order='F') > 0
+    maskGM = np.asarray(tmpGM.dataobj).reshape(nRows*nCols*nSlices, order='F') > 0
 
     maskAll  = np.logical_or(np.logical_or(maskWM, maskCSF), maskGM)
     maskWM_  = maskWM[maskAll]
     maskCSF_ = maskCSF[maskAll]
     maskGM_  = maskGM[maskAll]
+
+    if not op.isfile(EDGEmaskFileout) or overwrite:
+        GMWMmask = np.logical_or(tmpWM.dataobj,tmpGM.dataobj)
+        ALLmask = np.logical_or(GMWMmask, tmpCSF.dataobj)
+        ALLclose = binary_closing(ALLmask,structure=generate_binary_structure(3,4))
+        OUTmask = binary_erosion(np.logical_not(ALLclose),structure=generate_binary_structure(3,2),border_value=1)
+        OUTmask = binary_opening(OUTmask,structure=generate_binary_structure(3,2))
+        img = nib.Nifti1Image(OUTmask.astype('<f4'), tmpWM.affine)
+        nib.save(img, OUTmaskFileout)
+
+        OUTdil = binary_dilation(OUTmask, structure=generate_binary_structure(3,5),iterations=2)
+        GMWMdil = binary_dilation(GMWMmask, structure=generate_binary_structure(3,5))
+        CSFdil = binary_dilation(tmpCSF.dataobj, structure=generate_binary_structure(3,5),iterations=2)
+        CSFero = binary_erosion(CSFdil, iterations=4)
+        EDGEmask = np.logical_or(binary_opening(np.logical_and(CSFdil,GMWMdil)),binary_closing(np.logical_and(GMWMdil,OUTdil)))
+        EDGEmask = np.logical_and(EDGEmask, binary_opening(np.logical_not(CSFero)))
+        img = nib.Nifti1Image(EDGEmask.astype('<f4'), tmpWM.affine)
+        nib.save(img, EDGEmaskFileout)
     
     return maskAll, maskWM_, maskCSF_, maskGM_
 
@@ -1011,13 +1032,13 @@ def feature_spatial(fslDir, tempDir, aromaDir, melIC):
         # Get sum of Z-values of the voxels located within the CSF (calculate via the mean and number of non-zero voxels)
         csfVox = int(getoutput(' '.join([op.join(fslDir,'fslstats'),
                             tempIC,
-                            '-k mask_csf.nii.gz',
+                            '-k {}/CSFmask.nii'.format(aromaDir),
                             '-V | awk \'{print $1}\''])))
 
         if not (csfVox == 0):
             csfMean = float(getoutput(' '.join([op.join(fslDir,'fslstats'),
                             tempIC,
-                            '-k mask_csf.nii.gz',
+                            '-k {}/CSFmask.nii'.format(aromaDir),
                             '-M'])))
         else:
             csfMean = 0
@@ -1027,12 +1048,12 @@ def feature_spatial(fslDir, tempDir, aromaDir, melIC):
         # Get sum of Z-values of the voxels located within the Edge (calculate via the mean and number of non-zero voxels)
         edgeVox = int(getoutput(' '.join([op.join(fslDir,'fslstats'),
                             tempIC,
-                            '-k mask_edge.nii.gz',
+                            '-k {}/EDGEmask.nii'.format(aromaDir),
                             '-V | awk \'{print $1}\''])))
         if not (edgeVox == 0):
             edgeMean = float(getoutput(' '.join([op.join(fslDir,'fslstats'),
                             tempIC,
-                            '-k mask_edge.nii.gz',
+                            '-k {}/EDGEmask.nii'.format(aromaDir),
                             '-M'])))
         else:
             edgeMean = 0
@@ -1042,12 +1063,12 @@ def feature_spatial(fslDir, tempDir, aromaDir, melIC):
         # Get sum of Z-values of the voxels located outside the brain (calculate via the mean and number of non-zero voxels)
         outVox = int(getoutput(' '.join([op.join(fslDir,'fslstats'),
                             tempIC,
-                            '-k mask_out.nii.gz',
+                            '-k {}/OUTmask.nii'.format(aromaDir),
                             '-V | awk \'{print $1}\''])))
         if not (outVox == 0):
             outMean = float(getoutput(' '.join([op.join(fslDir,'fslstats'),
                             tempIC,
-                            '-k mask_out.nii.gz',
+                            '-k {}/OUTmask.nii'.format(aromaDir),
                             '-M'])))
         else:
             outMean = 0
@@ -1212,7 +1233,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         melmix = op.join(icaOut,'melodic_mix')
         melFTmix = op.join(icaOut,'melodic_FTmix')
         
-        edgeFract, csfFract = feature_spatial(fslDir, icaOut, getcwd(), melIC_MNI)
+        edgeFract, csfFract = feature_spatial(fslDir, icaOut, buildpath(), melIC_MNI)
         maxRPcorr = feature_time_series(melmix, mc)
         HFC = feature_frequency(melFTmix, TR)
         motionICs = classification(icaOut, maxRPcorr, edgeFract, HFC, csfFract)
