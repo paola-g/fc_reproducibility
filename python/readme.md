@@ -4,6 +4,7 @@
   <ul>
   <li> zscore: Convert each voxel’s time course to z-score (remove mean, divide by std)
   <li> pcSigCh: Convert each voxel’s time course to % signal change (remove mean, divide by mean, multiply by 100)
+  <li> demean: Subtract mean from each voxel's time course
   </ul>
 <li> Pre-whitening (True or False) 
 <li>Spatial Smoothing
@@ -22,20 +23,43 @@
   <li> R dR
   <li> R R^2
   <li> R R^2 R-1 R-1^2
+  <li> R dR R^2 dR^2
   <li> R R^2 R-1 R-1^2 R-2 R-2^2
+  <li> ICA-AROMA, specify denoising strategy:
+     <ul>
+         <li> aggr: aggressive denoising of the data using fsl_regfilt (full regression) 
+         <li> nonaggr:non-aggressive denoising of the data using fsl_regfilt (partial regression)
+     </ul>
   </ul>
 <li> Scrubbing
   <ul>
   <li> DVARS (specify threshold and number of adjacent volumes to exclude)
   <li> FD (specify threshold and number of adjacent volumes to exclude)
+  <li> DVARS+FD (specify thresholds and number of adjacent volumes to exclude)
+  <li> RMS (specify threshold and number of adjacent volumes to exclude)
   </ul>
 <li> Tissue Regression
+<ul> <li> specify which tissue signal to regress out:
   <ul>
+  <li> GM
+  <li> WM
   <li> WMCSF
   <li> WMCSF+dt
+  <li> WMCSF+dt+sq
   <li> CompCor (specify no. components)
   </ul>
+  <li> specify tissue from which the confounds should be regressed out:
+  <ul>
+    <li> GM
+    <li> wholebrain
+  </ul>
+</ul>
 <li> Global Signal Regression
+<ul>
+<li> GS
+<li> GS+dt
+<li> GS+dt+sq
+</ul>
 <li> Temporal Filtering
   <ul>
   <li> Butter (specify high and low pass threshold): Butterworth band pass filtering
