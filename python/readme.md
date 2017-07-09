@@ -67,6 +67,7 @@
   <li> DCT (specify high and low pass threshold): Discrete Cosine Transform, performed as regression 
   </ul>
 </ul>
+
 ### Current version 
 Custom pipeline for fMRI preprocessing.<br>
 Files:
@@ -85,6 +86,7 @@ Instruction for launching:
 <li> In the notebook cells can be executed sequentially (one by one or from the menu Cell->Run All)
 </ul>
 </ol>
+
 ### Older versions
 #### First version
 Porting of Julien's MATLAB code, mainly based on FSL.<br>
@@ -95,12 +97,14 @@ Files:
 <li> init.py, calls.py - files for testing (sequential execution)
 <li> init_par.py, calls_par.py, Finn_loadandpreprocess.py - files for testing (on SGE)
 </ul>
+
 #### Second version
 Implementation of Finn's pipeline (with Legendre polynomials and separate regressors for WM and CSF)<br>
 Files:
 <ul>
 <li> pipelineFinn.ipynb - notebook
 </ul>
+
 #### Third version
 Porting of Julien's Finn_preprocess2.m  (reduced dependencies on FSL)<br>
 Files:
@@ -108,12 +112,14 @@ Files:
 <li> pipelineFinn2.ipynb - notebook
 <li> pipelineFinn2.py - python version of notebook
 </ul>
+
 #### Nilearn version
 Implementation based on Nilearn, incomplete.<br>
 Files:
 <ul>
 <li>pipelineNilearn.py
 </ul>
+
 ### "Messy" working version
 Custom pipeline for fMRI preprocessing.<br>
 Files:
