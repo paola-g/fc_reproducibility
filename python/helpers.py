@@ -794,9 +794,13 @@ def plot_corrs(x,y,title=None):
     # show the plot
     plt.show()
     
+def sorted_ls(path, reverseOrder):
+    mtime = lambda f: os.stat(os.path.join(path, f)).st_mtime
+    return list(sorted(os.listdir(path), key=mtime, reverse=reverseOrder))
    
-def checkXML(inFile, operations, params, resDir):
-    for xfile in listdir(resDir):
+def checkXML(inFile, operations, params, resDir, useMostRecent=True):
+    fileList = sorted_ls(resDir, useMostRecent)
+    for xfile in fileList:
         if fnmatch.fnmatch(op.join(resDir,xfile), op.join(resDir,'????????.xml')):
             tree = ET.parse(op.join(resDir,xfile))
             root = tree.getroot()
