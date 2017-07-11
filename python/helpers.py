@@ -294,9 +294,9 @@ def makeTissueMasks(overwrite=False):
         ribbonFileout = op.join(buildpath(), 'ribbon.nii.gz')
         wmparcFileout = op.join(buildpath(), 'wmparc.nii.gz')
         # make identity matrix to feed to flirt for resampling
-        ribbonMat = op.join(buildpath(), 'ribbon_flirt.mat')
-        wmparcMat = op.join(buildpath(), 'wmparc_flirt.mat')
-        eyeMat = op.join(buildpath(), 'eye.mat')
+        ribbonMat = op.join(buildpath(), 'ribbon_flirt_{}.mat'.format(config.pipelineName))
+        wmparcMat = op.join(buildpath(), 'wmparc_flirt_{}.mat'.format(config.pipelineName))
+        eyeMat = op.join(buildpath(), 'eye_{}.mat'.format(config.pipelineName))
         with open(eyeMat,'w') as fid:
             fid.write('1 0 0 0\n0 1 0 0\n0 0 1 0\n0 0 0 1')
 
@@ -1260,7 +1260,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
 
                 if config.doScrubbing:
                     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
-                    toCensor = np.loadtxt(op.join(buildpath(), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
+                    toCensor = np.loadtxt(op.join(buildpath(), 'Censored_TimePoints_{}.txt'.format(config.pipelineName)), dtype=np.dtype(np.int32))
                     npts = toCensor.size
                     if npts==1:
                         toCensor=np.reshape(toCensor,(npts,))
@@ -1292,7 +1292,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         
     if config.doScrubbing:
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
-        toCensor = np.loadtxt(op.join(buildpath(), 'Censored_TimePoints.txt'), dtype=np.dtype(np.int32))
+        toCensor = np.loadtxt(op.join(buildpath(), 'Censored_TimePoints_{}.txt'.format(config.pipelineName)), dtype=np.dtype(np.int32))
         npts = toCensor.size
         if npts==1:
             toCensor=np.reshape(toCensor,(npts,))
@@ -1366,8 +1366,21 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         a_plus  = [i+k for i in censored[0] for k in range(1, pad+1)]
         censored = np.concatenate((censored[0], a_minus, a_plus))
         censored = np.unique(censored[np.where(np.logical_and(censored>=0, censored<len(score)))])
-    
-    np.savetxt(op.join(buildpath(), 'Censored_TimePoints.txt'), censored, delimiter='\n', fmt='%d')
+    censored = np.ravel(censored)
+    toAppend = np.array([])
+    for i in range(len(censored)):
+        if censored[i] > 0 and censored[i] < 5:
+            toAppend = np.append(toAppend,np.arange(0,censored[i]))
+        elif censored[i] > 1200 - 5:
+            toAppend = np.append(toAppend,np.arange(censored[i]+1,1200))
+        elif i<len(censored) - 1:
+            gap = censored[i+1] - censored[i] 
+            if gap > 1 and gap <= 5:
+                toAppend = np.append(toAppend,np.arange(censored[i]+1,censored[i+1]))
+    censored = np.append(censored,toAppend)
+    censored.sort()
+    censored = censored.astype(int)
+    np.savetxt(op.join(buildpath(), 'Censored_TimePoints_{}.txt'.format(config.pipelineName)), censored, delimiter='\n', fmt='%d')
     config.doScrubbing = True
 
     #even though these haven't changed, they are returned for consistency with other operations
