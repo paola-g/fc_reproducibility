@@ -50,6 +50,7 @@ import os
 import glob
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from scipy.ndimage.morphology import binary_closing, binary_dilation, binary_erosion, binary_opening, generate_binary_structure
+from astropy.stats import LombScargle
 #from memory_profiler import profile
 #import multiprocessing as mp
 
@@ -1236,6 +1237,22 @@ def interpolate(data,censored,TR,nTRs,method='linear'):
             H = H + mean_ct
 
             intpts = H[censored]
+            tseries[censored] = intpts
+            data[i,:] = tseries
+        elif method == 'astropy':
+            lombs = LombScargle(tpoints*TR, cens_tseries)
+            frequency, power = lombs.autopower(normalization='standard', samples_per_peak=8, nyquist_factor=1)
+            for f in np.arange(len(frequency)):
+                if f == 0:
+                    y_all = lombs.model(np.arange(nTRs)*TR, frequency[f]) - np.mean(cens_tseries)
+                else:
+                    y_all = y_all + lombs.model(np.arange(nTRs)*TR, frequency[f]) - np.mean(cens_tseries)
+            Std_y = np.std(y_all, ddof=1)
+            Std_h = np.std(cens_tseries,ddof=1)
+            norm_fac = Std_y/Std_h
+            y_final = y_all/norm_fac
+            y_final = y_final + np.mean(cens_tseries)
+            intpts = y_final[censored]
             tseries[censored] = intpts
             data[i,:] = tseries
         else:
