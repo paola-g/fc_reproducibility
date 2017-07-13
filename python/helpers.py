@@ -1180,6 +1180,69 @@ def denoising(fslDir, inFile, outDir, melmix, denType, denIdx):
         if (denType == 'aggr') or (denType == 'both'):
             os.symlink(inFile,op.join(outDir,'denoised_func_data_aggr.nii.gz'))
 
+def interpolate(data,censored,TR,nTRs,method='linear'):
+    N = data.shape[0]
+    tpoints = np.setdiff1d(np.arange(nTRs),censored)
+    for i in range(N):
+        tseries = data[i,:]
+        cens_tseries = tseries[tpoints]
+        if method=='linear':
+            # linear interpolation
+            intpts = np.interp(censored,tpoints,cens_tseries)
+            tseries[censored] = intpts
+            data[i,:] = tseries
+        elif method=='power':
+            # as in Power et. al 2014 a frequency transform is used to generate data with
+            # the same phase and spectral characteristics as the unflagged data
+            N = len(tpoints) # no. of time points
+            T = (tpoints.max() - tpoints.min())*TR # total time span
+            ofac = 8 # oversampling frequency (generally >=4)
+            hifac = 1 # highest frequency allowed.  hifac = 1 means 1*nyquist limit
+
+            # compute sampling frequencies
+            f = np.arange(1/(T*ofac),hifac*N/(2*T)+1/(T*ofac),1/(T*ofac))
+            # angular frequencies and constant offsets
+            w = 2*np.pi*f
+            w = w[:,np.newaxis]
+            t = TR*tpoints[:,np.newaxis].T
+            tau = np.arctan2(np.sum(np.sin(2*w*(t+1)),1),np.sum(np.cos(2*w*(t+1)),1))/(2*np.squeeze(w))
+
+            # spectral power sin and cosine terms
+            sterm = np.sin(w*(t+1) - (np.squeeze(w)*tau)[:,np.newaxis])
+            cterm = np.cos(w*(t+1) - (np.squeeze(w)*tau)[:,np.newaxis])
+
+            mean_ct = cens_tseries.mean()
+            D = cens_tseries - mean_ct
+
+            c = np.sum(cterm * D,1) / np.sum(np.power(cterm,2),1)
+            s = np.sum(sterm * D,1) / np.sum(np.power(sterm,2),1)
+
+            # The inverse function to re-construct the original time series
+            full_tpoints = (np.arange(nTRs)[:,np.newaxis]+1).T*TR
+            prod = full_tpoints*w
+            sin_t = np.sin(prod)
+            cos_t = np.cos(prod)
+            sw_p = sin_t*s[:,np.newaxis]
+            cw_p = cos_t*c[:,np.newaxis]
+            S = np.sum(sw_p,axis=0)
+            C = np.sum(cw_p,axis=0)
+            H = C + S
+
+            # Normalize the reconstructed spectrum, needed when ofac > 1
+            Std_H = np.std(H, ddof=1)
+            Std_h = np.std(cens_tseries,ddof=1)
+            norm_fac = Std_H/Std_h
+            H = H/norm_fac
+            H = H + mean_ct
+
+            intpts = H[censored]
+            tseries[censored] = intpts
+            data[i,:] = tseries
+        else:
+            print "Wrong interpolation method: nothing was done"
+            break
+    return data
+
 def MotionRegression(niiImg, flavor, masks, imgInfo):
     # assumes that data is organized as in the HCP
     motionFile = op.join(buildpath(), config.movementRegressorsFile)
@@ -1353,7 +1416,6 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         censored = np.where(np.logical_and(score>thr,scoreDVARS>thr2))
     else:
         censored = np.where(score>thr)
-    
     if (len(flavor)>3 and flavor[0] == 'FD+DVARS'):
         pad = flavor[3]
         a_minus = [i-k for i in censored[0] for k in range(1, pad+1)]
@@ -1370,18 +1432,23 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
     toAppend = np.array([])
     for i in range(len(censored)):
         if censored[i] > 0 and censored[i] < 5:
-            toAppend = np.append(toAppend,np.arange(0,censored[i]))
+            toAppend = np.union1d(toAppend,np.arange(0,censored[i]))
+            print toAppend
         elif censored[i] > 1200 - 5:
-            toAppend = np.append(toAppend,np.arange(censored[i]+1,1200))
+            toAppend = np.union1d(toAppend,np.arange(censored[i]+1,1200))
+            print toAppend
         elif i<len(censored) - 1:
             gap = censored[i+1] - censored[i] 
             if gap > 1 and gap <= 5:
-                toAppend = np.append(toAppend,np.arange(censored[i]+1,censored[i+1]))
-    censored = np.append(censored,toAppend)
+                toAppend = np.union1d(toAppend,np.arange(censored[i]+1,censored[i+1]))
+                print toAppend
+    censored = np.union1d(censored,toAppend)
     censored.sort()
     censored = censored.astype(int)
+    
     np.savetxt(op.join(buildpath(), 'Censored_TimePoints_{}.txt'.format(config.pipelineName)), censored, delimiter='\n', fmt='%d')
-    config.doScrubbing = True
+    if len(censored>0):
+        config.doScrubbing = True
 
     #even though these haven't changed, they are returned for consistency with other operations
     return niiImg[0],niiImg[1]
@@ -1570,18 +1637,33 @@ def TemporalFiltering(niiImg, flavor, masks, imgInfo):
     maskAll, maskWM_, maskCSF_, maskGM_ = masks
     nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
 
+    if config.doScrubbing:
+        censored = np.loadtxt(op.join(buildpath(), 'Censored_TimePoints_{}.txt'.format(config.pipelineName)), dtype=np.dtype(np.int32))
+        if len(censored)<nTRs and len(censored) > 0:
+            data = interpolate(niiImg[0],censored,TR,nTRs,method='linear')     
+            if niiImg[1] is not None:
+                data2 = interpolate(niiImg[1],censored,TR,nTRs,method='linear')
+        else:
+            data = niiImg[0]
+            if niiImg[1] is not None:
+                data2 = niiImg[1]
+    else:
+        data = niiImg[0]
+        if niiImg[1] is not None:
+            data2 = niiImg[1]
+
     if flavor[0] == 'Butter':
-        niiImg[0] = clean(niiImg[0].T, detrend=False, standardize=False, 
+        niiImg[0] = clean(data.T, detrend=False, standardize=False, 
                               t_r=TR, high_pass=flavor[1], low_pass=flavor[2]).T
         if niiImg[1] is not None:
-            niiImg[1] = clean(niiImg[1].T, detrend=False, standardize=False, 
+            niiImg[1] = clean(data2.T, detrend=False, standardize=False, 
                t_r=TR, high_pass=flavor[1], low_pass=flavor[2]).T
             
     elif flavor[0] == 'Gaussian':
         w = signal.gaussian(11,std=flavor[1])
-        niiImg[0] = signal.lfilter(w,1,niiImg[0])
+        niiImg[0] = signal.lfilter(w,1,data)
         if niiImg[1] is not None:
-            niiImg[1] = signal.lfilter(w,1,niiImg[1])
+            niiImg[1] = signal.lfilter(w,1,data2)
     elif flavor[0] == 'DCT':
         K = dctmtx(nTRs)
         HPC = 1/flavor[1]
@@ -2281,7 +2363,7 @@ def runPipelinePar(launchSubproc=False):
             
     if scrub_idx != -1:        
         for opr in config.sortedOperations:  
-            if opr[1] != 0 and opr[1] < scrub_idx:
+            if opr[1] != 0 and opr[1] <= scrub_idx:
                 opr[1] = opr[1]+1
 
         config.sortedOperations[curr_idx][1] = 1
