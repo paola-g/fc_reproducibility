@@ -2180,6 +2180,47 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 
+def makePrediction(subject, session, fcMatFile, test_index, thresh=0.01):
+        data = sio.loadmat(fcMatFile)
+        score = np.ravel(data[config.outScore])
+        fcMats = data[fcMatFile]
+        n_subs  = fcMats.shape[-1]
+        train_index = np.setdiff1d(np.arange(n_subs),test_index)
+        n_nodes = fcMats.shape[0]
+
+        triu_idx = np.triu_indices(n_nodes,1)
+        n_edges = len(triu_idx[1]);
+        edges = np.zeros([n_subs,n_edges])
+        for iSub in range(n_subs):
+                edges[iSub,] = fcMats[:,:,iSub][triu_idx]
+
+        loo = cross_validation.LeaveOneOut()
+        lr = linear_model.LinearRegression()
+
+        pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+        # select edges (positively and negatively) correlated with score with threshold thresh
+        idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+        idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+        filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
+        filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
+        # compute network statistic for each subject in training
+        strength_pos = filtered_pos.sum(axis=1)
+        strength_neg = filtered_neg.sum(axis=1)
+        # compute network statistic for test subject
+        str_pos_test = edges[test_index,idx_filtered_pos].sum()
+        str_neg_test = edges[test_index,idx_filtered_neg].sum()
+        # regression
+        lr_pos = lr.fit(strength_pos.reshape(-1,1),score[train_index])
+        predictions_pos = lr_pos.predict(str_pos_test)
+        lr_neg = lr.fit(strength_neg.reshape(-1,1),score[train_index])
+        predictions_neg = lr_neg.predict(str_neg_test)
+        errors_pos = abs(predictions_pos-score[test_index])
+        errors_neg = abs(predictions_neg-score[test_index])
+
+        results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg}
+        sio.savemat(op.join(config.DATADIR, 'IQpred_{}_{}_{}_{}.mat'.format(config.pipelineName, config.parcellationName, subject, session)),results)
+
+
 #@profile
 def runPipeline():
 
