@@ -209,16 +209,6 @@ def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False):
         data[i,:] = resid
     return data 
 
-# def normalize(data,flavor):
-#     if flavor == 'zscore':
-#         data = stats.zscore(data, axis=1, ddof=1)
-#         return data
-#     elif flavor == 'pcSigCh':
-#         data = 100 * (data - np.mean(data,axis=1)[:,np.newaxis]) / np.mean(data,axis=1)[:,np.newaxis]
-#     else:
-#         print 'Warning! Wrong normalization flavor. Nothing was done'
-#     return data    
-
 def legendre_poly(order, nTRs):
     # ** a) create polynomial regressor **
     x = np.arange(nTRs)
@@ -1395,6 +1385,10 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
     if flavor[0] == 'DVARS':
         # pcSigCh
         meanImg = np.mean(niiImg[0],axis=1)[:,np.newaxis]
+	close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
+	if close0.shape[0] > 0:
+            meanImg[close0,0] = np.max(np.abs(niiImg[0][close0,:]),axis=1)
+	    niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
         niiImg2 = 100 * (niiImg[0] - meanImg) / meanImg
         niiImg2[np.where(np.isnan(niiImg2))] = 0
         dt = np.diff(niiImg2, n=1, axis=1)
@@ -1416,6 +1410,10 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         score=np.sum(disp,1)
         # pcSigCh
         meanImg = np.mean(niiImg[0],axis=1)[:,np.newaxis]
+	close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
+	if close0.shape[0] > 0:
+            meanImg[close0,0] = np.max(np.abs(niiImg[0][close0,:]),axis=1)
+	    niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
         niiImg2 = 100 * (niiImg[0] - meanImg) / meanImg
         niiImg2[np.where(np.isnan(niiImg2))] = 0
         dt = np.diff(niiImg2, n=1, axis=1)
@@ -1435,8 +1433,12 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         thr2 = flavor[2]
         censDVARS = scoreDVARS > 1.05 * np.median(scoreDVARS)
         censored = np.where(np.logical_or(np.ravel(cleanFD)>thr,censDVARS))
+        print(len(np.ravel(censored)))
+        np.savetxt(op.join(buildpath(), 'FD_{}.txt'.format(config.pipelineName)), cleanFD, delimiter='\n', fmt='%d')
+        np.savetxt(op.join(buildpath(), 'DVARS_{}.txt'.format(config.pipelineName)), scoreDVARS, delimiter='\n', fmt='%d')
     else:
         censored = np.where(score>thr)
+        np.savetxt(op.join(buildpath(), '{}_{}.txt'.format(flavor[0],config.pipelineName)), score, delimiter='\n', fmt='%d')
     if (len(flavor)>3 and flavor[0] == 'FD+DVARS'):
         pad = flavor[3]
         a_minus = [i-k for i in censored[0] for k in range(1, pad+1)]
@@ -1725,9 +1727,21 @@ def VoxelNormalization(niiImg, flavor, masks, imgInfo):
         if niiImg[1] is not None:
             niiImg[1] = stats.zscore(niiImg[1], axis=1, ddof=1)
     elif flavor[0] == 'pcSigCh':
-        niiImg[0] = 100 * (niiImg[0] - np.mean(niiImg[0],axis=1)[:,np.newaxis]) / np.mean(niiImg[0],axis=1)[:,np.newaxis]
+        meanImg = np.mean(niiImg[0],axis=1)[:,np.newaxis]
+	close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
+	if close0.shape[0] > 0:
+            meanImg[close0,0] = np.max(np.abs(niiImg[0][close0,:]),axis=1)
+	    niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
+        niiImg[0] = 100 * (niiImg[0] - meanImg) / meanImg
+        niiImg[0][np.where(np.isnan(niiImg[0]))] = 0
         if niiImg[1] is not None:
-            niiImg[1] = 100 * (niiImg[1] - np.mean(niiImg[1],axis=1)[:,np.newaxis]) / np.mean(niiImg[1],axis=1)[:,np.newaxis]
+            meanImg = np.mean(niiImg[1],axis=1)[:,np.newaxis]
+	    close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
+	    if close0.shape[0] > 0:
+                meanImg[close0,0] = np.max(np.abs(niiImg[1][close0,:]),axis=1)
+	        niiImg[1][close0,:] = niiImg[1][close0,:] + meanImg[close0,:]
+            niiImg[1] = 100 * (niiImg[1] - meanImg) / meanImg
+            niiImg[1][np.where(np.isnan(niiImg[1]))] = 0
     elif flavor[0] == 'demean':
         niiImg[0] = niiImg[0] - niiImg[0].mean(1)[:,np.newaxis]
         if niiImg[1] is not None:
