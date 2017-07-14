@@ -163,7 +163,7 @@ config.operationDict = {
         ['TissueRegression',        3, ['CompCor', 5, 'WMCSF', 'wholebrain']],
         ['TissueRegression',        3, ['GM', 'wholebrain']], 
         ['GlobalSignalRegression',  3, ['GS']],
-        ['Scrubbing',               3, ['FD+DVARS', 0.025, 5]], #missing
+        ['Scrubbing',               3, ['FD+DVARS', 0.25, 5]], 
         ['TemporalFiltering',       4, ['Butter', 0.009, 0.08]]
         ]
     }
@@ -1429,8 +1429,12 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         return niiImg[0],niiImg[1]
     
     if flavor[0] == 'FD+DVARS':
+        nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
+        # as in Siegel et al. 2016
+        cleanFD = clean(score[:,np.newaxis], detrend=False, standardize=False, t_r=TR, low_pass=0.3)
         thr2 = flavor[2]
-        censored = np.where(np.logical_and(score>thr,scoreDVARS>thr2))
+        censDVARS = scoreDVARS > 1.05 * np.median(scoreDVARS)
+        censored = np.where(np.logical_or(np.ravel(cleanFD)>thr,censDVARS))
     else:
         censored = np.where(score>thr)
     if (len(flavor)>3 and flavor[0] == 'FD+DVARS'):
@@ -1450,15 +1454,12 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
     for i in range(len(censored)):
         if censored[i] > 0 and censored[i] < 5:
             toAppend = np.union1d(toAppend,np.arange(0,censored[i]))
-            print toAppend
         elif censored[i] > 1200 - 5:
             toAppend = np.union1d(toAppend,np.arange(censored[i]+1,1200))
-            print toAppend
         elif i<len(censored) - 1:
             gap = censored[i+1] - censored[i] 
             if gap > 1 and gap <= 5:
                 toAppend = np.union1d(toAppend,np.arange(censored[i]+1,censored[i+1]))
-                print toAppend
     censored = np.union1d(censored,toAppend)
     censored.sort()
     censored = censored.astype(int)
