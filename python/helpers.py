@@ -1231,18 +1231,21 @@ def interpolate(data,censored,TR,nTRs,method='linear'):
             data[i,:] = tseries
         elif method == 'astropy':
             lombs = LombScargle(tpoints*TR, cens_tseries)
-            frequency, power = lombs.autopower(normalization='standard', samples_per_peak=8, nyquist_factor=1)
+            frequency, power = lombs.autopower(normalization='standard', samples_per_peak=8, nyquist_factor=1, method='fast')
+            pwsort = np.argsort(power)
+            frequency = frequency[pwsort[-100:]]
+            mean_ct = np.mean(cens_tseries)
             for f in np.arange(len(frequency)):
                 if f == 0:
-                    y_all = lombs.model(np.arange(nTRs)*TR, frequency[f]) - np.mean(cens_tseries)
+                    y_all = lombs.model(censored*TR, frequency[f])
                 else:
-                    y_all = y_all + lombs.model(np.arange(nTRs)*TR, frequency[f]) - np.mean(cens_tseries)
+                    y_all = y_all + lombs.model(censored*TR, frequency[f])
+            y_all = y_all - mean_ct*len(frequency)
             Std_y = np.std(y_all, ddof=1)
             Std_h = np.std(cens_tseries,ddof=1)
             norm_fac = Std_y/Std_h
             y_final = y_all/norm_fac
-            y_final = y_final + np.mean(cens_tseries)
-            intpts = y_final[censored]
+            intpts = y_final + np.mean(cens_tseries)
             tseries[censored] = intpts
             data[i,:] = tseries
         else:
