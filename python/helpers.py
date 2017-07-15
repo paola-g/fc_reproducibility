@@ -1433,7 +1433,6 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         thr2 = flavor[2]
         censDVARS = scoreDVARS > 1.05 * np.median(scoreDVARS)
         censored = np.where(np.logical_or(np.ravel(cleanFD)>thr,censDVARS))
-        print(len(np.ravel(censored)))
         np.savetxt(op.join(buildpath(), 'FD_{}.txt'.format(config.pipelineName)), cleanFD, delimiter='\n', fmt='%d')
         np.savetxt(op.join(buildpath(), 'DVARS_{}.txt'.format(config.pipelineName)), scoreDVARS, delimiter='\n', fmt='%d')
     else:
@@ -1659,6 +1658,7 @@ def TemporalFiltering(niiImg, flavor, masks, imgInfo):
 
     if config.doScrubbing:
         censored = np.loadtxt(op.join(buildpath(), 'Censored_TimePoints_{}.txt'.format(config.pipelineName)), dtype=np.dtype(np.int32))
+        censored = np.atleast_1d(censored)
         if len(censored)<nTRs and len(censored) > 0:
             data = interpolate(niiImg[0],censored,TR,nTRs,method='linear')     
             if niiImg[1] is not None:
