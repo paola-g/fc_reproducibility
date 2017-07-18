@@ -163,6 +163,7 @@ config.operationDict = {
         ['TissueRegression',        3, ['CompCor', 5, 'WMCSF', 'wholebrain']],
         ['TissueRegression',        3, ['GM', 'wholebrain']], 
         ['GlobalSignalRegression',  3, ['GS']],
+        ['MotionRegression',        3, ['censoring']],
         ['Scrubbing',               3, ['FD+DVARS', 0.25, 5]], 
         ['TemporalFiltering',       4, ['Butter', 0.009, 0.08]]
         ]
@@ -1285,6 +1286,9 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         data_roll2[0] = 0
         data_roll2_squared = data_roll2 ** 2
         X = np.concatenate((data, data_squared, data_roll, data_roll_squared, data_roll2, data_roll2_squared), axis=1)
+    elif flavor[0] == 'censoring':
+        nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
+        X = np.empty((nTRs, 0))
     elif flavor[0] == 'ICA-AROMA':
         nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
         fslDir = op.join(environ["FSLDIR"],'bin','')
@@ -1469,8 +1473,10 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
     censored = censored.astype(int)
     
     np.savetxt(op.join(buildpath(), 'Censored_TimePoints_{}.txt'.format(config.pipelineName)), censored, delimiter='\n', fmt='%d')
-    if len(censored>0):
+    if len(censored)>0 and len(censored)<nTRs:
         config.doScrubbing = True
+    if len(censored) == nTRs:
+        print 'Warning! All points selected for censoring: scrubbing will not be performed.'
 
     #even though these haven't changed, they are returned for consistency with other operations
     return niiImg[0],niiImg[1]
