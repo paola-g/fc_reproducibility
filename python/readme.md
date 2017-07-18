@@ -25,6 +25,7 @@
   <li> R R^2 R-1 R-1^2
   <li> R dR R^2 dR^2
   <li> R R^2 R-1 R-1^2 R-2 R-2^2
+  <li> censored: use only regressors for censored time points
   <li> ICA-AROMA, specify denoising strategy:
      <ul>
          <li> aggr: aggressive denoising of the data using fsl_regfilt (full regression) 
