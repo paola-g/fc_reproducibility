@@ -2,13 +2,14 @@ from __future__ import division
 
 # initialize variables
 class config(object):
-    overwrite    = False
-    joblist = list()
-    useMemMap = False
-    steps = {}
-    Flavors = {}
-    sortedOperations = list()
-    
+    overwrite          = False
+    joblist            = list()
+    useMemMap          = False
+    steps              = {}
+    Flavors            = {}
+    sortedOperations   = list()
+    maskParcelswithGM  = False
+    maskParcelswithAll = False
 
 # Force matplotlib to not use any Xwindows backend.
 import matplotlib
@@ -24,7 +25,7 @@ import os.path as op
 from os import mkdir, makedirs, getcwd, remove, listdir, environ
 import scipy.stats as stats
 import nipype.interfaces.fsl as fsl
-from subprocess import call, check_output, CalledProcessError, getoutput
+from subprocess import call, check_output, CalledProcessError, getoutput, Popen
 import nibabel as nib
 import scipy.io as sio
 import sklearn.model_selection as cross_validation
@@ -60,6 +61,23 @@ def buildpath():
 
 
 config.operationDict = {
+    'MyConnectome': [
+        ['VoxelNormalization',      1, ['demean']],
+        ['Detrending',              2, ['poly', 1, 'wholebrain']],
+        ['TissueRegression',        3, ['WMCSF', 'wholebrain']],
+        ['MotionRegression',        3, ['R R^2 R-1 R-1^2']],
+        ['GlobalSignalRegression',  3, ['GS']],
+        ['TemporalFiltering',       4, ['Butter', 0.009, 0.08]],
+        ['Scrubbing',               5, ['FD', 0.25]]
+        ],
+    'MyConnectome_noscrub': [
+        ['VoxelNormalization',      1, ['demean']],
+        ['Detrending',              2, ['poly', 1, 'wholebrain']],
+        ['TissueRegression',        3, ['WMCSF', 'wholebrain']],
+        ['MotionRegression',        3, ['R R^2 R-1 R-1^2']],
+        ['GlobalSignalRegression',  3, ['GS']],
+        ['TemporalFiltering',       4, ['Butter', 0.009, 0.08]],
+        ],
     'Finn': [
         ['VoxelNormalization',      1, ['zscore']],
         ['Detrending',              2, ['legendre', 3, 'WMCSF']],
@@ -69,6 +87,14 @@ config.operationDict = {
         ['Detrending',              6, ['legendre', 3 ,'GM']],
         ['GlobalSignalRegression',  7, ['GS']]
         ],
+    'Finn_noTsmooth': [
+        ['VoxelNormalization',      1, ['zscore']],
+        ['Detrending',              2, ['legendre', 3, 'WMCSF']],
+        ['TissueRegression',        3, ['WMCSF', 'GM']],
+        ['MotionRegression',        4, ['R dR']],
+        ['Detrending',              5, ['legendre', 3 ,'GM']],
+        ['GlobalSignalRegression',  6, ['GS']]
+        ],
     'Gordon1': [
         ['VoxelNormalization',      1, ['demean']],
         ['Detrending',              2, ['poly', 1, 'wholebrain']],
@@ -77,6 +103,14 @@ config.operationDict = {
         ['GlobalSignalRegression',  3, ['GS']],
         ['TemporalFiltering',       4, ['Butter', 0.009, 0.08]],
         ['Scrubbing',               5, ['FD', 0.2]]
+        ],
+    'Gordon1_noBP': [
+        ['VoxelNormalization',      1, ['demean']],
+        ['Detrending',              2, ['poly', 1, 'wholebrain']],
+        ['TissueRegression',        3, ['WMCSF', 'wholebrain']],
+        ['MotionRegression',        3, ['R R^2 R-1 R-1^2']],
+        ['GlobalSignalRegression',  3, ['GS']],
+        ['Scrubbing',               4, ['FD', 0.2]]
         ],
     'Gordon2': [
         ['VoxelNormalization',      1, ['demean']],
@@ -277,7 +311,6 @@ def makeTissueMasks(overwrite=False):
     GMmaskFileout = op.join(buildpath(), 'GMmask.nii')
     OUTmaskFileout = op.join(buildpath(), 'OUTmask.nii')
     EDGEmaskFileout = op.join(buildpath(), 'EDGEmask.nii')
-    
     if not op.isfile(GMmaskFileout) or overwrite:
         # load ribbon.nii.gz and wmparc.nii.gz
         ribbonFilein = op.join(config.DATADIR, config.subject, 'MNINonLinear','ribbon.nii.gz')
@@ -769,8 +802,8 @@ def plot_corrs(x,y,title=None):
     plt.plot(p_x,upper,'b--',label='Upper confidence limit (95%)')
 
     # set coordinate limits
-    plt.xlim(4,25)
-    plt.ylim(5,25)
+    # plt.xlim(4,25)
+    # plt.ylim(5,25)
 
     # configure legend
     plt.legend(loc=0)
@@ -789,7 +822,7 @@ def plot_corrs(x,y,title=None):
 def sorted_ls(path, reverseOrder):
     mtime = lambda f: os.stat(os.path.join(path, f)).st_mtime
     return list(sorted(os.listdir(path), key=mtime, reverse=reverseOrder))
-   
+	
 def checkXML(inFile, operations, params, resDir, useMostRecent=True):
     fileList = sorted_ls(resDir, useMostRecent)
     for xfile in fileList:
@@ -1305,7 +1338,7 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
                 os.system(' '.join([os.path.join(fslDir,'melodic'),
                     '--in=' + config.fmriFile, 
                     '--outdir=' + icaOut, 
-                    '--dim=' + str(250),
+                    '--dim=' + str(min(250,np.int(data.shape[0]/2))),
                     '--Oall --nobet ',
                     '--tr=' + str(TR)]))
 
@@ -1357,7 +1390,6 @@ def MotionRegression(niiImg, flavor, masks, imgInfo):
         else:
             print 'ICA-AROMA: None of the components was classified as motion, so no denoising is applied.'
             X = np.empty((nTRs, 0))
-            
     else:
         print 'Wrong flavor, using default regressors: R dR'
         X = data
@@ -1392,8 +1424,8 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
     if flavor[0] == 'DVARS':
         # pcSigCh
         meanImg = np.mean(niiImg[0],axis=1)[:,np.newaxis]
-	close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
-	if close0.shape[0] > 0:
+        close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
+        if close0.shape[0] > 0:
             meanImg[close0,0] = np.max(np.abs(niiImg[0][close0,:]),axis=1)
 	    niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
         niiImg2 = 100 * (niiImg[0] - meanImg) / meanImg
@@ -1417,10 +1449,10 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         score=np.sum(disp,1)
         # pcSigCh
         meanImg = np.mean(niiImg[0],axis=1)[:,np.newaxis]
-	close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
-	if close0.shape[0] > 0:
+        close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
+        if close0.shape[0] > 0:
             meanImg[close0,0] = np.max(np.abs(niiImg[0][close0,:]),axis=1)
-	    niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
+        niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
         niiImg2 = 100 * (niiImg[0] - meanImg) / meanImg
         niiImg2[np.where(np.isnan(niiImg2))] = 0
         dt = np.diff(niiImg2, n=1, axis=1)
@@ -1737,16 +1769,16 @@ def VoxelNormalization(niiImg, flavor, masks, imgInfo):
             niiImg[1] = stats.zscore(niiImg[1], axis=1, ddof=1)
     elif flavor[0] == 'pcSigCh':
         meanImg = np.mean(niiImg[0],axis=1)[:,np.newaxis]
-	close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
-	if close0.shape[0] > 0:
+        close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
+        if close0.shape[0] > 0:
             meanImg[close0,0] = np.max(np.abs(niiImg[0][close0,:]),axis=1)
 	    niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
         niiImg[0] = 100 * (niiImg[0] - meanImg) / meanImg
         niiImg[0][np.where(np.isnan(niiImg[0]))] = 0
         if niiImg[1] is not None:
             meanImg = np.mean(niiImg[1],axis=1)[:,np.newaxis]
-	    close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
-	    if close0.shape[0] > 0:
+            close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
+            if close0.shape[0] > 0:
                 meanImg[close0,0] = np.max(np.abs(niiImg[1][close0,:]),axis=1)
 	        niiImg[1][close0,:] = niiImg[1][close0,:] + meanImg[close0,:]
             niiImg[1] = 100 * (niiImg[1] - meanImg) / meanImg
@@ -1971,9 +2003,13 @@ def parcellate(overwrite=False):
     #####################
     if not config.isCifti:
         maskAll, maskWM_, maskCSF_, maskGM_ = makeTissueMasks(False)
+        if not config.maskParcelswithAll:	  
+            maskAll  = np.ones(np.shape(maskAll), dtype=bool)
         tmpnii   = nib.load(config.parcellationFile)
         nRows, nCols, nSlices = tmpnii.header.get_data_shape()
         allparcels = np.asarray(tmpnii.dataobj).astype(np.uint16).reshape(nRows*nCols*nSlices, order='F')[maskAll]
+        if config.maskParcelswithGM:
+            allparcels[not maskGM_] = 0;
     else:
         if not op.isfile(config.parcellationFile.replace('.dlabel.nii','.tsv')):    
             cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.parcellationFile,
@@ -2009,9 +2045,9 @@ def parcellate(overwrite=False):
     ####################
     # denoised data
     ####################
-    rstring = get_rcode(config.fmriFile_dn)
-    alltsFile = op.join(tsDir,'allParcels_{}.txt'.format(rstring))
-    if not op.isfile(alltsFile) or overwrite:
+    rstring      = get_rcode(config.fmriFile_dn)
+    alltsFile    = op.join(tsDir,'allParcels_{}.txt'.format(rstring))
+    if (not op.isfile(alltsFile)) or overwrite:
         # read denoised volume
         if not config.isCifti:
             data, nRows, nCols, nSlices, nTRs, affine, TR = load_img(config.fmriFile_dn, maskAll)
@@ -2025,7 +2061,15 @@ def parcellate(overwrite=False):
         for iParcel in np.arange(config.nParcels):
             tsFile = op.join(tsDir,'parcel{:03d}_{}.txt'.format(iParcel+1,rstring))
             if not op.isfile(tsFile) or overwrite:
-                np.savetxt(tsFile,np.nanmean(data[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.6f',delimiter='\n')
+                with open(tsFile,'w') as f_handle:
+                    np.savetxt(f_handle,np.nanmean(data[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.6f',delimiter='\n')
+            # save all voxels in mask, with header indicating parcel number
+            tsFileAll = op.join(tsDir,'parcel{:03d}_{}_all.txt'.format(iParcel+1,rstring))
+            if not op.isfile(tsFileAll) or overwrite:
+                # nVox = np.where(allparcels==iParcel+1)[0].size
+                # np.savetxt(tsFileAll,(iParcel+1)*np.ones((1,nVox),dtype=np.int),fmt='%d',delimiter=',',newline='\n')
+                with open(tsFileAll,'w') as f_handle:
+                    np.savetxt(f_handle,np.transpose(data[np.where(allparcels==iParcel+1)[0],:]),fmt='%.6f',delimiter=',',newline='\n')
         # concatenate all ts
         print 'Concatenating data'
         cmd = 'paste '+op.join(tsDir,'parcel???_{}.txt'.format(rstring))+' > '+alltsFile
@@ -2066,7 +2110,6 @@ def plotFC(displayPlot=False,overwrite=False):
 
     if not op.isfile(savePlotFile) or overwrite:
         computeFC(overwrite)
-    
     tsDir = op.join(buildpath(),config.parcellationName,config.fmriRun+config.ext)
     fcFile = op.join(tsDir,'allParcels_Pearson.txt')
     fcMat = np.genfromtxt(fcFile,delimiter=",")
@@ -2170,7 +2213,6 @@ def plotQCrsFC(fcMats,fcMats_dn,fdScores,idcode=''):
 
 def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     savePlotFile=op.join(config.DATADIR,'{}_{}_{}_deltaR.png'.format(config.pipelineName,config.parcellationName,idcode))
-    
     if not config.isCifti:
         tmpnii = nib.load(config.parcellationFile)
         nRows, nCols, nSlices = tmpnii.header.get_data_shape()
@@ -2203,46 +2245,111 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     # save figure
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
+	
+def runPrediction(fcMatFile, test_index, thresh=0.01):
+    data        = sio.loadmat(fcMatFile)
+    score       = np.ravel(data[config.outScore])
+    fcMats      = data['fcMats']
+    n_subs      = fcMats.shape[-1]
+    train_index = np.setdiff1d(np.arange(n_subs),test_index)
+    n_nodes     = fcMats.shape[0]
 
-def makePrediction(subject, session, fcMatFile, test_index, thresh=0.01):
-        data = sio.loadmat(fcMatFile)
-        score = np.ravel(data[config.outScore])
-        fcMats = data[fcMatFile]
-        n_subs  = fcMats.shape[-1]
-        train_index = np.setdiff1d(np.arange(n_subs),test_index)
-        n_nodes = fcMats.shape[0]
+    triu_idx    = np.triu_indices(n_nodes,1)
+    n_edges     = len(triu_idx[1]);
+    edges       = np.zeros([n_subs,n_edges])
+    for iSub in range(n_subs):
+        edges[iSub,] = fcMats[:,:,iSub][triu_idx]
 
-        triu_idx = np.triu_indices(n_nodes,1)
-        n_edges = len(triu_idx[1]);
-        edges = np.zeros([n_subs,n_edges])
-        for iSub in range(n_subs):
-                edges[iSub,] = fcMats[:,:,iSub][triu_idx]
+    loo = cross_validation.LeaveOneOut()
+    lr  = linear_model.LinearRegression()
 
-        loo = cross_validation.LeaveOneOut()
-        lr = linear_model.LinearRegression()
+    pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+    # select edges (positively and negatively) correlated with score with threshold thresh
+    idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+    idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+    filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
+    filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
+    # compute network statistic for each subject in training
+    strength_pos = filtered_pos.sum(axis=1)
+    strength_neg = filtered_neg.sum(axis=1)
+    # compute network statistic for test subject
+    str_pos_test = edges[test_index,idx_filtered_pos].sum()
+    str_neg_test = edges[test_index,idx_filtered_neg].sum()
+    # regression
+    lr_pos = lr.fit(strength_pos.reshape(-1,1),score[train_index])
+    predictions_pos = lr_pos.predict(str_pos_test)
+    lr_neg = lr.fit(strength_neg.reshape(-1,1),score[train_index])
+    predictions_neg = lr_neg.predict(str_neg_test)
+    errors_pos = abs(predictions_pos-score[test_index])
+    errors_neg = abs(predictions_neg-score[test_index])
 
-        pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
-        # select edges (positively and negatively) correlated with score with threshold thresh
-        idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
-        idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
-        filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
-        filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
-        # compute network statistic for each subject in training
-        strength_pos = filtered_pos.sum(axis=1)
-        strength_neg = filtered_neg.sum(axis=1)
-        # compute network statistic for test subject
-        str_pos_test = edges[test_index,idx_filtered_pos].sum()
-        str_neg_test = edges[test_index,idx_filtered_neg].sum()
-        # regression
-        lr_pos = lr.fit(strength_pos.reshape(-1,1),score[train_index])
-        predictions_pos = lr_pos.predict(str_pos_test)
-        lr_neg = lr.fit(strength_neg.reshape(-1,1),score[train_index])
-        predictions_neg = lr_neg.predict(str_neg_test)
-        errors_pos = abs(predictions_pos-score[test_index])
-        errors_neg = abs(predictions_neg-score[test_index])
+    results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg}
+    sio.savemat(op.join(config.DATADIR, 'IQpred_{}_{}_{}.mat'.format(config.pipelineName, config.parcellationName, data['subjects'][test_index])),results)
 
-        results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg}
-        sio.savemat(op.join(config.DATADIR, 'IQpred_{}_{}_{}_{}.mat'.format(config.pipelineName, config.parcellationName, subject, session)),results)
+def runPredictionPar(fcMatFile,thresh=0.01):
+    data        = sio.loadmat(fcMatFile)
+    subjects    = data['subjects']
+    print "Starting IQ prediction..."
+    iSub = 0
+    for config.subject in subjects:
+        jobDir = op.join(config.DATADIR, config.subject,'MNINonLinear', 'Results','jobs')
+        
+        if not op.isdir(jobDir): 
+            mkdir(jobDir)
+        jobName = 's{}_{}_iqpred'.format(config.subject,config.pipelineName)
+        # make a script
+        thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
+        thispythonfn += 'from helpers import *\n'
+        thispythonfn += 'logFid                  = open("{}","a+")\n'.format(op.join(jobDir,jobName+'.log'))
+        thispythonfn += 'sys.stdout              = logFid\n'
+        thispythonfn += 'sys.stderr              = logFid\n'
+        # print date and time stamp
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'print strftime("%Y-%m-%d %H:%M:%S", localtime())\n'
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'config.DATADIR          = "{}"\n'.format(config.DATADIR)
+        thispythonfn += 'config.pipelineName     = "{}"\n'.format(config.pipelineName)
+        thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
+        thispythonfn += 'config.outScore         = "{}"\n'.format(config.outScore)
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'print "runPrediction(\'{}\', {}, thresh={})"\n'.format(fcMatFile, iSub, thresh)
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'runPrediction("{}", {}, thresh={})\n'.format(fcMatFile, iSub, thresh)
+        thispythonfn += 'logFid.close()\n'
+        thispythonfn += 'END'
+        # prepare the script
+        thisScript=op.join(jobDir,jobName+'.sh')
+        while True:
+            if op.isfile(thisScript) and (not config.overwrite):
+                thisScript=thisScript.replace('.sh','+.sh') # use fsl feat convention
+            else:
+                break
+        with open(thisScript,'w') as fidw:
+            fidw.write('#!/bin/bash\n')
+            fidw.write('python {}\n'.format(thispythonfn))
+        cmd='chmod 774 '+thisScript
+        call(cmd,shell=True)
+
+        #this is a "hack" to make sure the .sh script exists before it is called... 
+        while not op.isfile(thisScript):
+            sleep(.05)
+
+        if config.queue:
+            # call to fnSubmitToCluster
+            JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(-100,config.sgeopts))
+            config.joblist.append(JobID)
+            print 'submitted {} (SGE job #{})'.format(jobName,JobID)
+            sys.stdout.flush()
+        elif launchSubproc:
+            sys.stdout.flush()
+            process = Popen(thisScript,shell=True)
+            config.joblist.append(process)
+            print 'submitted {}'.format(jobName)
+        else:
+            runPrediction(fcMatFile,iSub,thresh)
+        
+        iSub = iSub +1
+
 
 
 #@profile
@@ -2356,7 +2463,7 @@ def runPipelinePar(launchSubproc=False):
         config.fmriFile = op.join(buildpath(), config.fmriRun+'_Atlas'+config.suffix+'.dtseries.nii')
     else:
         config.fmriFile = op.join(buildpath(), config.fmriRun+config.suffix+'.nii.gz')
-
+    
     if config.useFIX and not op.isfile(config.fmriFile):
         if op.isfile(op.join(buildpath(), config.fmriRun+'.nii.gz')):
             volFile = op.join(buildpath(), config.fmriRun+'.nii.gz')
@@ -2466,13 +2573,19 @@ def runPipelinePar(launchSubproc=False):
     precomputed = checkXML(config.fmriFile,config.steps,config.Flavors,buildpath()) 
 
 
-
     if precomputed and not config.overwrite:
         do_makeGrayPlot = False
         do_plotFC = False
         config.fmriFile_dn = precomputed
         if not op.isfile(config.fmriFile_dn.replace(config.ext,'_grayplot.png')):
             do_makeGrayPlot = True
+#        # temporary, to write parcellation with all voxels in mask
+#        toDelete = config.fmriFile_dn.replace(config.ext,'_'+config.parcellationName+'_fcMat.png')
+#        if op.isfile(toDelete):
+#            try:
+#                remove(toDelete)
+#            except OSError:
+#                pass
         if not op.isfile(config.fmriFile_dn.replace(config.ext,'_'+config.parcellationName+'_fcMat.png')):
             do_plotFC = True
         if (not do_plotFC) and (not do_makeGrayPlot):
@@ -2480,7 +2593,30 @@ def runPipelinePar(launchSubproc=False):
     else:   
         do_makeGrayPlot = True
         do_plotFC       = True
-        
+#        # remove the precomputed file and associated xml
+#        if precomputed:
+#            try:
+#                remove(precomputed)
+#            except OSError:
+#                pass
+#            if not config.isCifti:
+#                try:
+#                    remove(op.join(op.dirname(precomputed),precomputed[-15:].replace(".nii.gz",".xml")))
+#                except OSError:
+#                    pass
+#                try:
+#                    remove(op.join(op.dirname(precomputed),"*"+precomputed[-15:].replace(".nii.gz","*.png")))
+#                except OSError:
+#                    pass
+#            else:
+#                try:
+#                    remove(op.join(op.dirname(precomputed),precomputed[-21:].replace(".dtseries.nii",".xml")))
+#                except OSError:
+#                    pass
+#                try:
+#                    remove(op.join(op.dirname(precomputed),"*"+precomputed[-21:].replace(".dtseries.nii","*.png")))
+#                except OSError:
+#                    pass
 
     if config.queue or launchSubproc:
         jobDir = op.join(buildpath(),'jobs')
@@ -2566,7 +2702,9 @@ def runPipelinePar(launchSubproc=False):
         elif launchSubproc:
             #print 'spawned python subprocess on local machine'
             sys.stdout.flush()
-            call(thisScript,shell=True)
+            process = Popen(thisScript,shell=True)
+            config.joblist.append(process)
+            print 'submitted {}'.format(jobName)
     
     else:
     
@@ -2603,3 +2741,30 @@ def runPipelinePar(launchSubproc=False):
     
     return True
 
+
+def checkProgress():
+    if len(config.joblist) != 0:
+        while True:
+            nleft = len(config.joblist)
+            for i in range(nleft):
+                if config.queue:
+                    myCmd = "qstat | grep ' {} '".format(config.joblist[i])
+                    isEmpty = False
+                    try:
+                        cmdOut = check_output(myCmd, shell=True)
+                    except CalledProcessError as e:
+                        isEmpty = True
+                    finally:
+                        if isEmpty:
+                            nleft = nleft-1
+                else:
+                    returnCode = config.joblist[i].poll()
+                    if returnCode is not None:
+                        nleft = nleft-1
+            if nleft == 0:
+                break
+            else:
+                print 'Waiting for {} jobs to complete...'.format(nleft)
+            sleep(60)
+    print 'All done!!' 
+    return True
