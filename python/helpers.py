@@ -1420,6 +1420,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
     - https://github.com/poldrack/fmriqa/blob/master/compute_fd.py
     """
     thr = flavor[1]
+    nRows, nCols, nSlices, nTRs, affine, TR = imgInfo
 
     if flavor[0] == 'DVARS':
         # pcSigCh
