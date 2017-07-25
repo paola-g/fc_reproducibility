@@ -1287,6 +1287,66 @@ def interpolate(data,censored,TR,nTRs,method='linear'):
             break
     return data
 
+"""
+Partial Correlation in Python (clone of Matlab's partialcorr)
+
+This uses the linear regression approach to compute the partial 
+correlation (might be slow for a huge number of variables). The 
+algorithm is detailed here:
+
+    http://en.wikipedia.org/wiki/Partial_correlation#Using_linear_regression
+
+Taking X and Y two variables of interest and Z the matrix with all the variable minus {X, Y},
+the algorithm can be summarized as
+
+    1) perform a normal linear least-squares regression with X as the target and Z as the predictor
+    2) calculate the residuals in Step #1
+    3) perform a normal linear least-squares regression with Y as the target and Z as the predictor
+    4) calculate the residuals in Step #3
+    5) calculate the correlation coefficient between the residuals from Steps #2 and #4; 
+
+    The result is the partial correlation between X and Y while controlling for the effect of Z
+
+Original code by:
+Author: Fabian Pedregosa-Izquierdo, f@bianp.net
+Testing: Valentina Borghesani, valentinaborghesani@gmail.com
+"""
+def partial_corr(X,y,z):
+    """
+    Returns the sample linear partial correlation coefficients between each column in X and variable y, controlling 
+    for the variable z.
+
+
+    Parameters
+    ----------
+    X : array-like, shape (n, p)
+        Array with the different variables. Each column of X is taken as a variable
+
+
+    Returns
+    -------
+    P : array-like, shape (p,)
+        P[i,0] contains the partial correlation of X[:, i] and y controlling
+        for z and P[i,1] the associated p-value.
+    """
+    
+    X = X[:,:,np.newaxis]
+    y = y[:,np.newaxis]
+    z = z[:,np.newaxis]
+    p = X.shape[1]
+    P_corr = np.zeros((p,2), dtype=np.float)
+    for i in range(p):
+        beta_y = linalg.lstsq(z, y)[0]
+        beta_x = linalg.lstsq(z, X[:,i,:])[0]
+
+        res_x = X[:,i,:] - z.dot(beta_x)
+        res_y = y - z.dot(beta_y)
+
+        P_corr[i,] = stats.pearsonr(res_x, res_y)
+        
+    return P_corr
+
+### Operations
 def MotionRegression(niiImg, flavor, masks, imgInfo):
     # assumes that data is organized as in the HCP
     motionFile = op.join(buildpath(), config.movementRegressorsFile)
@@ -2247,7 +2307,7 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 	
-def runPrediction(fcMatFile, test_index, thresh=0.01):
+def runPrediction(fcMatFile, test_index, thresh=0.01, mode='IQ',motFile='',idcode=''):
     data        = sio.loadmat(fcMatFile)
     score       = np.ravel(data[config.outScore])
     fcMats      = data['fcMats']
@@ -2264,10 +2324,74 @@ def runPrediction(fcMatFile, test_index, thresh=0.01):
     loo = cross_validation.LeaveOneOut()
     lr  = linear_model.LinearRegression()
 
-    pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
-    # select edges (positively and negatively) correlated with score with threshold thresh
-    idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
-    idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+    if mode=='IQ':
+        pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+        # select edges (positively and negatively) correlated with score with threshold thresh
+        idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+        idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif mode=='IQ-mot':
+        # select edges (positively and negatively) correlated with score but not correlated with motion
+        motScore = np.loadtxt(motFile)
+        pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+        pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
+        idx_iq_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+        idx_iq_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+        idx_mot = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]>thresh])
+        idx_filtered_pos = np.intersect1d(idx_iq_pos,idx_mot)
+        idx_filtered_neg = np.intersect1d(idx_iq_neg,idx_mot)
+        print 'iq_pos: {}, iq_neg: {}, mot: {}'.format(len(idx_iq_pos), len(idx_iq_neg), len(idx_mot))
+        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif mode=='IQ+mot':
+        # select edges (positively and negatively) correlated with both score and  motion
+        motScore = np.loadtxt(motFile)
+        pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+        pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
+        idx_iq_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+        idx_iq_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+        idx_mot_pos = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]>0])
+        idx_mot_neg  = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]<0])
+        idx_filtered_pos = np.intersect1d(idx_iq_pos,idx_mot_pos)
+        idx_filtered_neg = np.intersect1d(idx_iq_neg,idx_mot_pos)
+        print 'iq_pos: {}, iq_neg: {}, mot_pos: {}, mot_neg: {}'.format(len(idx_iq_pos), len(idx_iq_neg), len(idx_mot_pos), len(idx_mot_neg))
+        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif mode=='mot-IQ':
+        # select edges (positively and negatively) correlated with motion but not correlated with score
+        motScore = np.loadtxt(motFile)
+        pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+        pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
+        idx_iq = np.array([idx for idx in range(1,n_edges) if pears[idx][1]>thresh])
+        idx_mot_pos = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]>0])
+        idx_mot_neg  = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]<0])
+        idx_filtered_pos = np.intersect1d(idx_iq,idx_mot_pos)
+        idx_filtered_neg = np.intersect1d(idx_iq,idx_mot_pos)
+        print 'mot_pos: {}, mot_neg: {}, mot: {}'.format(len(idx_mot_pos), len(idx_mot_neg), len(idx_iq))
+        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif mode=='mot':
+        # computing partial correlation between edges and score, controlling for motion
+        motScore = np.loadtxt(motFile)
+        pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
+        idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+        idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif mode=='parIQ':
+        # computing partial correlation between edges and motion, controlling for score
+        motScore = np.loadtxt(motFile)
+        pcorrs = partial_corr(edges[train_index,:],score[train_index],motScore[train_index])
+        idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]>0])
+        idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]<0])
+        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif mode=='parmot':
+        motScore = np.loadtxt(motFile)
+        pcorrs = partial_corr(edges[train_index,:],motScore[train_index],score[train_index])
+        idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]>0])
+        idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]<0])
+        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+        
+    else:
+        print 'Warning! Wrong mode, nothing was done.'
+        return   
+         
     filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
     filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
     # compute network statistic for each subject in training
@@ -2285,9 +2409,9 @@ def runPrediction(fcMatFile, test_index, thresh=0.01):
     errors_neg = abs(predictions_neg-score[test_index])
 
     results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg}
-    sio.savemat(op.join(config.DATADIR, 'IQpred_{}_{}_{}.mat'.format(config.pipelineName, config.parcellationName, data['subjects'][test_index])),results)
+    sio.savemat(op.join(config.DATADIR, '{}pred_{}_{}_{}_{}.mat'.format(mode, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode)),results)
 
-def runPredictionPar(fcMatFile,thresh=0.01):
+def runPredictionPar(fcMatFile,thresh=0.01,mode='IQ', motFile='',launchSubproc=False, idcode=''):
     data        = sio.loadmat(fcMatFile)
     subjects    = data['subjects']
     print "Starting IQ prediction..."
@@ -2315,7 +2439,7 @@ def runPredictionPar(fcMatFile,thresh=0.01):
         thispythonfn += 'print "========================="\n'
         thispythonfn += 'print "runPrediction(\'{}\', {}, thresh={})"\n'.format(fcMatFile, iSub, thresh)
         thispythonfn += 'print "========================="\n'
-        thispythonfn += 'runPrediction("{}", {}, thresh={})\n'.format(fcMatFile, iSub, thresh)
+        thispythonfn += 'runPrediction("{}", {}, thresh={}, mode="{}", motFile="{}", idcode="{}")\n'.format(fcMatFile, iSub, thresh, mode, motFile, idcode)
         thispythonfn += 'logFid.close()\n'
         thispythonfn += 'END'
         # prepare the script
@@ -2347,7 +2471,7 @@ def runPredictionPar(fcMatFile,thresh=0.01):
             config.joblist.append(process)
             print 'submitted {}'.format(jobName)
         else:
-            runPrediction(fcMatFile,iSub,thresh)
+            runPrediction(fcMatFile,iSub,thresh,mode=mode, motFile=motFile, idcode=idcode)
         
         iSub = iSub +1
 
@@ -2743,7 +2867,7 @@ def runPipelinePar(launchSubproc=False):
     return True
 
 
-def checkProgress():
+def checkProgress(pause=60):
     if len(config.joblist) != 0:
         while True:
             nleft = len(config.joblist)
@@ -2766,6 +2890,6 @@ def checkProgress():
                 break
             else:
                 print 'Waiting for {} jobs to complete...'.format(nleft)
-            sleep(60)
+            sleep(pause)
     print 'All done!!' 
     return True
