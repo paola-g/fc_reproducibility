@@ -2307,7 +2307,7 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 	
-def runPrediction(fcMatFile, test_index, thresh=0.01, mode='IQ',motFile='',idcode=''):
+def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ',predict='IQ',motFile='',idcode=''):
     data        = sio.loadmat(fcMatFile)
     score       = np.ravel(data[config.outScore])
     fcMats      = data['fcMats']
@@ -2323,16 +2323,18 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, mode='IQ',motFile='',idcod
 
     loo = cross_validation.LeaveOneOut()
     lr  = linear_model.LinearRegression()
+ 
+    if motFile:
+        motScore = np.loadtxt(motFile)
 
-    if mode=='IQ':
+    if model=='IQ':
         pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
         # select edges (positively and negatively) correlated with score with threshold thresh
         idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
         idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
-        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
-    elif mode=='IQ-mot':
+        #print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif model=='IQ-mot':
         # select edges (positively and negatively) correlated with score but not correlated with motion
-        motScore = np.loadtxt(motFile)
         pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
         pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
         idx_iq_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
@@ -2340,11 +2342,10 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, mode='IQ',motFile='',idcod
         idx_mot = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]>thresh])
         idx_filtered_pos = np.intersect1d(idx_iq_pos,idx_mot)
         idx_filtered_neg = np.intersect1d(idx_iq_neg,idx_mot)
-        print 'iq_pos: {}, iq_neg: {}, mot: {}'.format(len(idx_iq_pos), len(idx_iq_neg), len(idx_mot))
-        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
-    elif mode=='IQ+mot':
+        #print 'iq_pos: {}, iq_neg: {}, mot: {}'.format(len(idx_iq_pos), len(idx_iq_neg), len(idx_mot))
+        #print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif model=='IQ+mot':
         # select edges (positively and negatively) correlated with both score and  motion
-        motScore = np.loadtxt(motFile)
         pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
         pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
         idx_iq_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
@@ -2352,44 +2353,39 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, mode='IQ',motFile='',idcod
         idx_mot_pos = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]>0])
         idx_mot_neg  = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]<0])
         idx_filtered_pos = np.intersect1d(idx_iq_pos,idx_mot_pos)
-        idx_filtered_neg = np.intersect1d(idx_iq_neg,idx_mot_pos)
-        print 'iq_pos: {}, iq_neg: {}, mot_pos: {}, mot_neg: {}'.format(len(idx_iq_pos), len(idx_iq_neg), len(idx_mot_pos), len(idx_mot_neg))
-        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
-    elif mode=='mot-IQ':
+        idx_filtered_neg = np.intersect1d(idx_iq_neg,idx_mot_neg)
+        #print 'iq_pos: {}, iq_neg: {}, mot_pos: {}, mot_neg: {}'.format(len(idx_iq_pos), len(idx_iq_neg), len(idx_mot_pos), len(idx_mot_neg))
+        #print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif model=='mot-IQ':
         # select edges (positively and negatively) correlated with motion but not correlated with score
-        motScore = np.loadtxt(motFile)
         pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
         pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
         idx_iq = np.array([idx for idx in range(1,n_edges) if pears[idx][1]>thresh])
         idx_mot_pos = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]>0])
         idx_mot_neg  = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]<0])
         idx_filtered_pos = np.intersect1d(idx_iq,idx_mot_pos)
-        idx_filtered_neg = np.intersect1d(idx_iq,idx_mot_pos)
-        print 'mot_pos: {}, mot_neg: {}, mot: {}'.format(len(idx_mot_pos), len(idx_mot_neg), len(idx_iq))
-        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
-    elif mode=='mot':
+        idx_filtered_neg = np.intersect1d(idx_iq,idx_mot_neg)
+        #print 'mot_pos: {}, mot_neg: {}, mot: {}'.format(len(idx_mot_pos), len(idx_mot_neg), len(idx_iq))
+        #print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif model=='mot':
         # computing partial correlation between edges and score, controlling for motion
-        motScore = np.loadtxt(motFile)
         pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
         idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
         idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
-        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
-    elif mode=='parIQ':
+        #print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif model=='parIQ':
         # computing partial correlation between edges and motion, controlling for score
-        motScore = np.loadtxt(motFile)
         pcorrs = partial_corr(edges[train_index,:],score[train_index],motScore[train_index])
         idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]>0])
         idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]<0])
-        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
-    elif mode=='parmot':
-        motScore = np.loadtxt(motFile)
+        #print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
+    elif model=='parmot':
         pcorrs = partial_corr(edges[train_index,:],motScore[train_index],score[train_index])
         idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]>0])
         idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]<0])
-        print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
-        
+        #print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
     else:
-        print 'Warning! Wrong mode, nothing was done.'
+        print 'Warning! Wrong model, nothing was done.'
         return   
          
     filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
@@ -2401,6 +2397,8 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, mode='IQ',motFile='',idcod
     str_pos_test = edges[test_index,idx_filtered_pos].sum()
     str_neg_test = edges[test_index,idx_filtered_neg].sum()
     # regression
+    if predict=='motion': #otherwise config.outScore is predicted
+        score = motScore
     lr_pos = lr.fit(strength_pos.reshape(-1,1),score[train_index])
     predictions_pos = lr_pos.predict(str_pos_test)
     lr_neg = lr.fit(strength_neg.reshape(-1,1),score[train_index])
@@ -2409,12 +2407,12 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, mode='IQ',motFile='',idcod
     errors_neg = abs(predictions_neg-score[test_index])
 
     results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg}
-    sio.savemat(op.join(config.DATADIR, '{}pred_{}_{}_{}_{}.mat'.format(mode, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode)),results)
+    sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}.mat'.format(model,predict, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode)),results)
 
-def runPredictionPar(fcMatFile,thresh=0.01,mode='IQ', motFile='',launchSubproc=False, idcode=''):
+def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode=''):
     data        = sio.loadmat(fcMatFile)
     subjects    = data['subjects']
-    print "Starting IQ prediction..."
+    print "Starting {} prediction...".format(predict)
     iSub = 0
     for config.subject in subjects:
         jobDir = op.join(config.DATADIR, config.subject,'MNINonLinear', 'Results','jobs')
@@ -2439,7 +2437,7 @@ def runPredictionPar(fcMatFile,thresh=0.01,mode='IQ', motFile='',launchSubproc=F
         thispythonfn += 'print "========================="\n'
         thispythonfn += 'print "runPrediction(\'{}\', {}, thresh={})"\n'.format(fcMatFile, iSub, thresh)
         thispythonfn += 'print "========================="\n'
-        thispythonfn += 'runPrediction("{}", {}, thresh={}, mode="{}", motFile="{}", idcode="{}")\n'.format(fcMatFile, iSub, thresh, mode, motFile, idcode)
+        thispythonfn += 'runPrediction("{}", {}, thresh={}, model="{}", predict="{}", motFile="{}", idcode="{}")\n'.format(fcMatFile, iSub, thresh, model, predict,motFile, idcode)
         thispythonfn += 'logFid.close()\n'
         thispythonfn += 'END'
         # prepare the script
@@ -2471,7 +2469,7 @@ def runPredictionPar(fcMatFile,thresh=0.01,mode='IQ', motFile='',launchSubproc=F
             config.joblist.append(process)
             print 'submitted {}'.format(jobName)
         else:
-            runPrediction(fcMatFile,iSub,thresh,mode=mode, motFile=motFile, idcode=idcode)
+            runPrediction(fcMatFile,iSub,thresh,model=model,predict=predict, motFile=motFile, idcode=idcode)
         
         iSub = iSub +1
 
