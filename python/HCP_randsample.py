@@ -104,13 +104,13 @@ RelRMSMean = RelRMSMean[keepSub,:]
 print 'Keeping {} subjects [{} M]'.format(len(subjects),sum([g=='M' for g in gender]))
 score = np.asarray(score)
 # Generate random sample
-#sample_size = 120
-#repetitions = 100
-sample_size = 12
-repetitions = 10
-#samples = np.vstack([random.sample(range(len(subjects)),sample_size) for i in range(repetitions)])
-#np.savetxt('samples.txt', samples)
-samples = np.loadtxt('samples.txt',dtype=np.int16)
+sample_size = 120
+repetitions = 100
+if not op.isfile('samples.txt') or config.overwrite:
+    samples = np.vstack([random.sample(range(len(subjects)),sample_size) for i in range(repetitions)])
+    np.savetxt('samples.txt', samples)
+else:
+    samples = np.loadtxt('samples.txt',dtype=np.int16)
 for iSample in range(repetitions):
     # submit jobs with sge
     config.queue        = True
@@ -144,7 +144,7 @@ for iSample in range(repetitions):
     print 'Computing FC...'
     fcMatFile = 'fcMats_{}_{}_{}'.format(config.pipelineName, config.parcellationName, 'sample{}'.format(iSample))
     config.overwrite = True
-    if op.isfile('{}.mat'.format(fcMatFile)) or config.overwrite:
+    if op.isfile('{}.mat'.format(fcMatFile)) and not config.overwrite:
         fcMats_dn = sio.loadmat(fcMatFile)['fcMats']
     else:
         fcMats_dn    = np.zeros((config.nParcels,config.nParcels,len(smpl_subjects),len(fmriRuns)),dtype=np.float32)
@@ -182,8 +182,9 @@ for iSample in range(repetitions):
     #for model in ['IQ','IQ-mot', 'IQ+mot', 'mot-IQ', 'parIQ', 'parmot']:
     for model in ['IQ']:
         runPredictionPar(fcMatFile,thresh=0.01, model=model,predict=predict, motFile=motFile, idcode='sample{}'.format(iSample))
-        checkProgress(pause=5)
-        config.joblist = []
+        if config.queue: 
+            checkProgress(pause=5)
+            config.joblist = []
         # merge cross-validation folds, save results
         n_subs          = fcMats_dn.shape[-1]
         predictions_pos = np.zeros([n_subs,1])
