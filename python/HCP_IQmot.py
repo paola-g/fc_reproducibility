@@ -161,7 +161,7 @@ if config.queue:
 
 print 'Computing FC...'
 fcMatFile = 'fcMats_{}_{}_{}'.format(config.pipelineName, config.parcellationName, session)
-if op.isfile('{}.mat'.format(fcMatFile)) or not config.overwrite:
+if op.isfile('{}.mat'.format(fcMatFile)) and not config.overwrite:
     fcMats_dn = sio.loadmat(fcMatFile)['fcMats']
 else:
     fcMats_dn    = np.zeros((config.nParcels,config.nParcels,len(subjects),len(fmriRuns)),dtype=np.float32)
