@@ -229,6 +229,9 @@ def regress(data, nTRs, TR, regressors, preWhitening=False):
         fittedvalues = np.dot(X, fit)
         resid = data[i,:] - np.ravel(fittedvalues)
         data[i,:] = resid
+        if N%(i+1)%1000==0:
+            print 'Regression completed for {} voxels'.format(i+1)
+    print 'Regression complete'	
     return data 
 
 def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False): 
