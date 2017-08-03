@@ -216,7 +216,8 @@ def filter_regressors(regressors, filtering, nTRs, TR):
             regressors = signal.lfilter(w,1,regressors, axis=0)  
     return regressors
     
-def regress(data, nTRs, TR, regressors, preWhitening=False):    
+def regress(data, nTRs, TR, regressors, preWhitening=False): 
+    print 'Starting regression with {} regressors...'.format(regressors.shape[1])
     if preWhitening:
         W = prewhitening(data, nTRs, TR, regressors)
         data = np.dot(data,W)
@@ -230,7 +231,8 @@ def regress(data, nTRs, TR, regressors, preWhitening=False):
         data[i,:] = resid
     return data 
 
-def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False):    
+def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False): 
+    print 'Starting partial regression with {} regressors...'.format(regressors.shape[1])
     if preWhitening:
         W = prewhitening(data, nTRs, TR, regressors)
         data = np.dot(data,W)
