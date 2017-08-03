@@ -2750,7 +2750,7 @@ def runPipelinePar(launchSubproc=False):
         # make a script
         thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
         thispythonfn += 'from helpers import *\n'
-        thispythonfn += 'logFid                  = open("{}","a+")\n'.format(op.join(jobDir,jobName+'.log'))
+        thispythonfn += 'logFid                  = open("{}","a+",1)\n'.format(op.join(jobDir,jobName+'.log'))
         thispythonfn += 'sys.stdout              = logFid\n'
         thispythonfn += 'sys.stderr              = logFid\n'
         # print date and time stamp
