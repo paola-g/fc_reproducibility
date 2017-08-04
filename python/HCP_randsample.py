@@ -173,7 +173,7 @@ for iSample in range(repetitions):
     
     # submit jobs with sge
     predict = 'IQ'
-    #predict = 'mot'
+    #predict = 'motion'
     config.queue        = False
     launchSubproc = False
     config.sgeopts      = '-l mem_free=2G' 
