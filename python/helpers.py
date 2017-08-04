@@ -2639,10 +2639,14 @@ def runPipelinePar(launchSubproc=False):
         config.ext = '.dtseries.nii'
     else:
         config.ext = '.nii.gz'
-    if config.isCifti:
-        config.fmriFile = op.join(buildpath(), config.fmriRun+'_Atlas'+config.suffix+'.dtseries.nii')
+    if hasattr(config,'fmriFileTemplate'):
+        #e.g. config.fmriFileTemplate =  #fMRIrun#_Atlas_MSMAll.dtseries.nii
+        config.fmriFile = op.join(buildpath(), config.fmriFileTemplate.replace('#fMRIrun#', config.fmriRun))
     else:
-        config.fmriFile = op.join(buildpath(), config.fmriRun+config.suffix+'.nii.gz')
+        if config.isCifti:
+            config.fmriFile = op.join(buildpath(), config.fmriRun+'_Atlas'+config.suffix+'.dtseries.nii')
+        else:
+            config.fmriFile = op.join(buildpath(), config.fmriRun+config.suffix+'.nii.gz')
     
     if config.useFIX and not op.isfile(config.fmriFile):
         if op.isfile(op.join(buildpath(), config.fmriRun+'.nii.gz')):
