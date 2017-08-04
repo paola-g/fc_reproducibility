@@ -224,7 +224,7 @@ def regress(data, nTRs, TR, regressors, preWhitening=False):
         regressors = np.dot(W,regressors)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = data.shape[0]
-    start_time = time.time()
+    start_time = time()
     print 'Looping through {} voxels...'.format(N)
     minutes_elapsed = 0
     for i in range(N):
@@ -232,12 +232,12 @@ def regress(data, nTRs, TR, regressors, preWhitening=False):
         fittedvalues = np.dot(X, fit)
         resid = data[i,:] - np.ravel(fittedvalues)
         data[i,:] = resid
-        elapsed_time = time.time() - start_time
-        if floor(elapsed_time/60)>minutes_elapsed:
-            minutes_elapsed = floor(elapsed_time/60)
-            print '{:02d}h{:02d}min{:02d}s: Regression completed for {}/{} voxels'.format(floor(elapsed_time/3600),floor((elapsed_time%3600)/60),floor(elapsed_time%60),i+1,N)
-    elapsed_time = time.time() - start_time
-    print 'Regression completed in {}h{}min{}s'.format(i+1,N,floor(elapsed_time/3600),floor((elapsed_time%3600)/60),floor(elapsed_time%60)) 
+        elapsed_time = time() - start_time
+        if np.floor(elapsed_time/60)>minutes_elapsed:
+            minutes_elapsed = np.floor(elapsed_time/60)
+            print '{:02d}h{:02d}min{:02d}s: Regression completed for {}/{} voxels'.format(int(np.floor(elapsed_time/3600)),int(np.floor((elapsed_time%3600)/60)),int(np.floor(elapsed_time%60)),i+1,N)
+    elapsed_time = time() - start_time
+    print 'Regression completed in {:02d}h{:02d}min{:02d}s'.format(int(np.floor(elapsed_time/3600)),int(np.floor((elapsed_time%3600)/60)),int(np.floor(elapsed_time%60))) 
     return data 
 
 def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False):
@@ -248,7 +248,7 @@ def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False):
         regressors = np.dot(W,regressors)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = data.shape[0]
-    start_time = time.time()
+    start_time = time()
     print 'Looping through {} voxels...'.format(N)
     minutes_elapsed = 0
     for i in range(N):
@@ -256,12 +256,12 @@ def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False):
         fittedvalues = np.dot(X[:,partialIdx], fit[partialIdx])
         resid = data[i,:] - np.ravel(fittedvalues)
         data[i,:] = resid
-        elapsed_time = time.time() - start_time
-        if floor(elapsed_time/60)>minutes_elapsed:
-            minutes_elapsed = floor(elapsed_time/60)
-            print '{:02d}h{:02d}min{:02d}s: Regression completed for {}/{} voxels'.format(floor(elapsed_time/3600),floor((elapsed_time%3600)/60),floor(elapsed_time%60),i+1,N)
-    elapsed_time = time.time() - start_time
-    print 'Regression completed in {}h{}min{}s'.format(i+1,N,floor(elapsed_time/3600),floor((elapsed_time%3600)/60),floor(elapsed_time%60)) 
+        elapsed_time = time() - start_time
+        if np.floor(elapsed_time/60)>minutes_elapsed:
+            minutes_elapsed = np.floor(elapsed_time/60)
+            print '{:02d}h{:02d}min{:02d}s: Regression completed for {}/{} voxels'.format(int(np.floor(elapsed_time/3600)),int(np.floor((elapsed_time%3600)/60)),int(np.floor(elapsed_time%60)),i+1,N)
+    elapsed_time = time() - start_time
+    print 'Regression completed in {:02d}h{:02d}min{:02d}s'.format(int(np.floor(elapsed_time/3600)),int(np.floor((elapsed_time%3600)/60)),int(np.floor(elapsed_time%60))) 
     return data 
 
 def legendre_poly(order, nTRs):
