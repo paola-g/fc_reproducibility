@@ -180,7 +180,7 @@ for iSample in range(repetitions):
     motFile = 'RMS_sample{}.txt'.format(iSample)
     # run the prediction for each subject
     #for model in ['IQ','IQ-mot', 'IQ+mot', 'mot-IQ', 'parIQ', 'parmot']:
-    for model in ['IQ']:
+    for model in ['IQ', 'mot']:
         runPredictionPar(fcMatFile,thresh=0.01, model=model,predict=predict, motFile=motFile, idcode='sample{}'.format(iSample))
         if config.queue: 
             checkProgress(pause=5)
