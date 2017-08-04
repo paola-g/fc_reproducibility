@@ -215,8 +215,27 @@ def filter_regressors(regressors, filtering, nTRs, TR):
             w = signal.gaussian(11,std=filtering[1])
             regressors = signal.lfilter(w,1,regressors, axis=0)  
     return regressors
-    
+
 def regress(data, nTRs, TR, regressors, preWhitening=False):
+    print 'Starting regression with {} regressors...'.format(regressors.shape[1])
+    if preWhitening:
+        W = prewhitening(data, nTRs, TR, regressors)
+        data = np.dot(data,W)
+        regressors = np.dot(W,regressors)
+    X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
+    N = data.shape[0]
+    start_time = time()
+    fit = np.linalg.lstsq(X, data.T)[0]
+    fittedvalues = np.dot(X, fit)
+    resid = data - fittedvalues.T
+    data = resid
+    elapsed_time = time() - start_time
+    print 'Regression completed in {:02d}h{:02d}min{:02d}s'.format(int(np.floor(elapsed_time/3600)),int(np.floor((elapsed_time%3600)/60)),int(np.floor(elapsed_time%60))) 
+    return data
+
+    
+def regress_(data, nTRs, TR, regressors, preWhitening=False):
+    # voxel per voxel: super slow!
     print 'Starting regression with {} regressors...'.format(regressors.shape[1])
     if preWhitening:
         W = prewhitening(data, nTRs, TR, regressors)
@@ -241,6 +260,24 @@ def regress(data, nTRs, TR, regressors, preWhitening=False):
     return data 
 
 def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False):
+    print 'Starting partial regression with {} regressors...'.format(regressors.shape[1])
+    if preWhitening:
+        W = prewhitening(data, nTRs, TR, regressors)
+        data = np.dot(data,W)
+        regressors = np.dot(W,regressors)
+    X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
+    N = data.shape[0]
+    start_time = time()
+    fit = np.linalg.lstsq(X, data.T)[0]
+    fittedvalues = np.dot(X[:,partialIdx], fit[partialIdx])
+    resid = data - fittedvalues.T
+    data = resid
+    elapsed_time = time() - start_time
+    print 'Regression completed in {:02d}h{:02d}min{:02d}s'.format(int(np.floor(elapsed_time/3600)),int(np.floor((elapsed_time%3600)/60)),int(np.floor(elapsed_time%60))) 
+    return data 
+
+def partial_regress_(data, nTRs, TR, regressors, partialIdx, preWhitening=False):
+    # voxel per voxel: super slow!
     print 'Starting partial regression with {} regressors...'.format(regressors.shape[1])
     if preWhitening:
         W = prewhitening(data, nTRs, TR, regressors)
