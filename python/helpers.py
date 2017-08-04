@@ -216,7 +216,7 @@ def filter_regressors(regressors, filtering, nTRs, TR):
             regressors = signal.lfilter(w,1,regressors, axis=0)  
     return regressors
     
-def regress(data, nTRs, TR, regressors, preWhitening=False): 
+def regress(data, nTRs, TR, regressors, preWhitening=False):
     print 'Starting regression with {} regressors...'.format(regressors.shape[1])
     if preWhitening:
         W = prewhitening(data, nTRs, TR, regressors)
@@ -224,17 +224,23 @@ def regress(data, nTRs, TR, regressors, preWhitening=False):
         regressors = np.dot(W,regressors)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = data.shape[0]
+    start_time = time.time()
+    print 'Looping through {} voxels...'.format(N)
+    minutes_elapsed = 0
     for i in range(N):
         fit = np.linalg.lstsq(X, data[i,:].T)[0]
         fittedvalues = np.dot(X, fit)
         resid = data[i,:] - np.ravel(fittedvalues)
         data[i,:] = resid
-        if N%(i+1)%1000==0:
-            print 'Regression completed for {} voxels'.format(i+1)
-    print 'Regression complete'	
+        elapsed_time = time.time() - start_time
+        if floor(elapsed_time/60)>minutes_elapsed:
+            minutes_elapsed = floor(elapsed_time/60)
+            print '{:02d}h{:02d}min{:02d}s: Regression completed for {}/{} voxels'.format(floor(elapsed_time/3600),floor((elapsed_time%3600)/60),floor(elapsed_time%60),i+1,N)
+    elapsed_time = time.time() - start_time
+    print 'Regression completed in {}h{}min{}s'.format(i+1,N,floor(elapsed_time/3600),floor((elapsed_time%3600)/60),floor(elapsed_time%60)) 
     return data 
 
-def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False): 
+def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False):
     print 'Starting partial regression with {} regressors...'.format(regressors.shape[1])
     if preWhitening:
         W = prewhitening(data, nTRs, TR, regressors)
@@ -242,11 +248,20 @@ def partial_regress(data, nTRs, TR, regressors, partialIdx, preWhitening=False):
         regressors = np.dot(W,regressors)
     X  = np.concatenate((np.ones([nTRs,1]), regressors), axis=1)
     N = data.shape[0]
+    start_time = time.time()
+    print 'Looping through {} voxels...'.format(N)
+    minutes_elapsed = 0
     for i in range(N):
         fit = np.linalg.lstsq(X, data[i,:].T)[0]
         fittedvalues = np.dot(X[:,partialIdx], fit[partialIdx])
         resid = data[i,:] - np.ravel(fittedvalues)
         data[i,:] = resid
+        elapsed_time = time.time() - start_time
+        if floor(elapsed_time/60)>minutes_elapsed:
+            minutes_elapsed = floor(elapsed_time/60)
+            print '{:02d}h{:02d}min{:02d}s: Regression completed for {}/{} voxels'.format(floor(elapsed_time/3600),floor((elapsed_time%3600)/60),floor(elapsed_time%60),i+1,N)
+    elapsed_time = time.time() - start_time
+    print 'Regression completed in {}h{}min{}s'.format(i+1,N,floor(elapsed_time/3600),floor((elapsed_time%3600)/60),floor(elapsed_time%60)) 
     return data 
 
 def legendre_poly(order, nTRs):
@@ -2391,7 +2406,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ',predict='IQ',mo
         #print 'pos: {}, neg: {}'.format(len(idx_filtered_pos), len(idx_filtered_neg))
     else:
         print 'Warning! Wrong model, nothing was done.'
-        return   
+        return
          
     filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
     filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
