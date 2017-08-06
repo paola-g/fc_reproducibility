@@ -52,6 +52,10 @@ import glob
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from scipy.ndimage.morphology import binary_closing, binary_dilation, binary_erosion, binary_opening, generate_binary_structure
 from astropy.stats import LombScargle
+from sklearn.linear_model import LassoCV, ElasticNetCV
+from sklearn.svm import SVR
+from sklearn.feature_selection import RFECV
+from sklearn.model_selection import GridSearchCV
 #from memory_profiler import profile
 #import multiprocessing as mp
 
