@@ -2468,7 +2468,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ',predict='IQ',mo
         X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
-        cv = cross_validation.StratifiedKFoldn(n_splits=k)		
+        cv = cross_validation.StratifiedKFold(n_splits=k)		
         elnet = ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99],cv=cv,max_iter=1000)
         prediction = elnet.fit(X_train,y_train)
         error = abs(prediction-y_test)
