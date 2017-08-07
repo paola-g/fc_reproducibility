@@ -1549,7 +1549,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
         if close0.shape[0] > 0:
             meanImg[close0,0] = np.max(np.abs(niiImg[0][close0,:]),axis=1)
-	    niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
+            niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
         niiImg2 = 100 * (niiImg[0] - meanImg) / meanImg
         niiImg2[np.where(np.isnan(niiImg2))] = 0
         dt = np.diff(niiImg2, n=1, axis=1)
@@ -1574,7 +1574,7 @@ def Scrubbing(niiImg, flavor, masks, imgInfo):
         close0 = np.where(meanImg < 1e5*np.finfo(np.float).eps)[0]
         if close0.shape[0] > 0:
             meanImg[close0,0] = np.max(np.abs(niiImg[0][close0,:]),axis=1)
-        niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
+            niiImg[0][close0,:] = niiImg[0][close0,:] + meanImg[close0,:]
         niiImg2 = 100 * (niiImg[0] - meanImg) / meanImg
         niiImg2[np.where(np.isnan(niiImg2))] = 0
         dt = np.diff(niiImg2, n=1, axis=1)
@@ -2368,9 +2368,12 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 	
-def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ',predict='IQ',motFile='',idcode='', regression='Finn'):
+def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn'):
     data        = sio.loadmat(fcMatFile)
-    score       = np.ravel(data[config.outScore])
+    df = pd.read_csv(config.behavFile)
+    subjects = data['subjects']
+    newdf = df[df['Subject'].isin([int(s) for s in subjects])]
+    score = np.ravel(newdf[config.outScore])
     fcMats      = data['fcMats']
     n_subs      = fcMats.shape[-1]
     train_index = np.setdiff1d(np.arange(n_subs),test_index)
@@ -2382,11 +2385,13 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ',predict='IQ',mo
     for iSub in range(n_subs):
         edges[iSub,] = fcMats[:,:,iSub][triu_idx]
 
+    
+ 
     if motFile:
         motScore = np.loadtxt(motFile)
-
+	
     if regression=='Finn':
-	    lr  = linear_model.LinearRegression()
+        lr  = linear_model.LinearRegression()
         if model=='IQ':
             # select edges (positively and negatively) correlated with score with threshold thresh		
             pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
@@ -2461,7 +2466,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ',predict='IQ',mo
         sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predict, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
 	
     elif regression=='elnet':
-        k=5
+        k=4
         n_bins_cv = 4
         if predict=='motion': #otherwise config.outScore is predicted
             score = motScore
@@ -2470,13 +2475,14 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ',predict='IQ',mo
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)		
         elnet = ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99],cv=cv,max_iter=1000)
-        prediction = elnet.fit(X_train,y_train)
+        elnet.fit(X_train,y_train)
+        prediction = elnet.predict([X_test])
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error}
         sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predict, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
 	
     elif regression=='lasso':
-        k=5
+        k=4
         n_bins_cv = 4
         if predict=='motion': #otherwise config.outScore is predicted
             score = motScore
@@ -2486,14 +2492,14 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ',predict='IQ',mo
         cv = cross_validation.StratifiedKFold(n_splits=k)
         lasso = LassoCV(cv=cv.split(X_train, bins_cv))
         lasso.fit(X_train,y_train)
-        prediction = lasso.predict(X_test)
+        prediction = lasso.predict([X_test])
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error}
         sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predict, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
     
     elif regression=='svm':
         param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
-        k=5
+        k=4
         n_bins_cv = 5
         svr = SVR(kernel='linear')
         selector = RFECV(svr, step=round(0.10*edges.shape[1]), cv=5) #5-fold NOT stratified
@@ -2502,7 +2508,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ',predict='IQ',mo
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])  
         grids = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv))
         grids.fit(X_train,y_train)
-        prediction = grids.predict(X_test)
+        prediction = grids.predict([X_test])
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error}
         sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predict, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
