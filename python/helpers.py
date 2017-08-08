@@ -2463,7 +2463,11 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         errors_neg = abs(predictions_neg-score[test_index])
 
         results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg}
-        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predict, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
+        if predict=='motion':
+            predScore = 'RMS'
+        else:
+            predScore = config.outScore
+        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
 	
     elif regression=='elnet':
         k=4
@@ -2479,7 +2483,11 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         prediction = elnet.predict([X_test])
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error}
-        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predict, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
+        if predict=='motion':
+            predScore = 'RMS'
+        else:
+            predScore = config.outScore
+        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
 	
     elif regression=='lasso':
         k=4
@@ -2495,7 +2503,11 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         prediction = lasso.predict([X_test])
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error}
-        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predict, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
+        if predict=='motion':
+            predScore = 'RMS'
+        else:
+            predScore = config.outScore
+        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
     
     elif regression=='svm':
         param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
@@ -2511,7 +2523,11 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         prediction = grids.predict([X_test])
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error}
-        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predict, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
+        if predict=='motion':
+            predScore = 'RMS'
+        else:
+            predScore = config.outScore
+        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
 
 def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn'):
     data        = sio.loadmat(fcMatFile)
