@@ -41,8 +41,8 @@ config.sgeopts      = '-l mem_free=2G'
 motFile = 'RMS_{}.txt'.format(session)
 # run the IQ prediction for each subject
 regression='Finn'
-for regression in ['lasso', 'svm', 'elnet']:
-    for config.outScore in ['NEOFAC_O','NEOFAC_C','NEOFAC_N','NEOFAC_E']: 
+for regression in ['Finn','lasso', 'svm', 'elnet']:
+    for config.outScore in ['NEOFAC_A','NEOFAC_O','NEOFAC_C','NEOFAC_N','NEOFAC_E']: 
         score = np.ravel(newdf[config.outScore])
         for model in ['IQ']:
             runPredictionPar(fcMatFile,thresh=0.01, model=model,predict=predict, motFile=motFile,idcode=idcode, regression=regression)
@@ -55,7 +55,7 @@ for regression in ['lasso', 'svm', 'elnet']:
             
             iSub = 0
             for subject in subjects:
-                results = sio.loadmat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predict,config.pipelineName, config.parcellationName, subject, session, regression))) 
+                results = sio.loadmat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,config.outScore,config.pipelineName, config.parcellationName, subject, session, regression))) 
                 if regression=='Finn':
                     predictions_neg[iSub] = results['pred_neg']
                     predictions_pos[iSub] = results['pred_pos']
