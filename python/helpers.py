@@ -2369,6 +2369,7 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     #plt.show(fig)
 	
 def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn'):
+    data        = sio.loadmat(fcMatFile)
     if predict=='motion':
         predScore = 'RMS'
     else:
@@ -2377,7 +2378,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
     if op.isfile(outFile) and not config.overwrite:
         print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
         return
-    data        = sio.loadmat(fcMatFile)
+
     df = pd.read_csv(config.behavFile)
     subjects = data['subjects']
     newdf = df[df['Subject'].isin([int(s) for s in subjects])]
