@@ -2369,6 +2369,14 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     #plt.show(fig)
 	
 def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn'):
+    if predict=='motion':
+        predScore = 'RMS'
+    else:
+        predScore = config.outScore
+    outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression))
+    if op.isfile(outFile) and not config.overwrite:
+        print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
+        return
     data        = sio.loadmat(fcMatFile)
     df = pd.read_csv(config.behavFile)
     subjects = data['subjects']
@@ -2463,11 +2471,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         errors_neg = abs(predictions_neg-score[test_index])
 
         results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg}
-        if predict=='motion':
-            predScore = 'RMS'
-        else:
-            predScore = config.outScore
-        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
+        sio.savemat(outFile,results)
 	
     elif regression=='elnet':
         k=4
@@ -2483,11 +2487,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         prediction = elnet.predict([X_test])
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error}
-        if predict=='motion':
-            predScore = 'RMS'
-        else:
-            predScore = config.outScore
-        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
+        sio.savemat(outFile,results)
 	
     elif regression=='lasso':
         k=4
@@ -2503,12 +2503,8 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         prediction = lasso.predict([X_test])
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error}
-        if predict=='motion':
-            predScore = 'RMS'
-        else:
-            predScore = config.outScore
-        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
-    
+        sio.savemat(outFile,results)
+	
     elif regression=='svm':
         param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
         k=4
@@ -2523,18 +2519,22 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         prediction = grids.predict([X_test])
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error}
-        if predict=='motion':
-            predScore = 'RMS'
-        else:
-            predScore = config.outScore
-        sio.savemat(op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression)),results)
-
+        sio.savemat(outFile,results)
+	
 def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn'):
     data        = sio.loadmat(fcMatFile)
     subjects    = data['subjects']
+    if predict=='motion':
+        predScore = 'RMS'
+    else:
+        predScore = config.outScore
     print "Starting {} prediction...".format(predict)
     iSub = 0
     for config.subject in subjects:
+        outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][iSub],idcode,regression))
+        if op.isfile(outFile) and not config.overwrite:
+            print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
+            continue
         jobDir = op.join(config.DATADIR, config.subject,'MNINonLinear', 'Results','jobs')
         
         if not op.isdir(jobDir): 
