@@ -2471,7 +2471,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         errors_pos = abs(predictions_pos-score[test_index])
         errors_neg = abs(predictions_neg-score[test_index])
 
-        results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg}
+        results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg, 'idx_filtered_pos':idx_filtered_pos, 'idx_filtered_neg':idx_filtered_neg}
         sio.savemat(outFile,results)
 	
     elif regression=='elnet':
@@ -2487,7 +2487,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         elnet.fit(X_train,y_train)
         prediction = elnet.predict([X_test])
         error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error}
+        results = {'pred':prediction, 'error':error, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_}
         sio.savemat(outFile,results)
 	
     elif regression=='lasso':
@@ -2503,7 +2503,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         lasso.fit(X_train,y_train)
         prediction = lasso.predict([X_test])
         error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error}
+        results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_}
         sio.savemat(outFile,results)
 	
     elif regression=='svm':
@@ -2519,7 +2519,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         grids.fit(X_train,y_train)
         prediction = grids.predict([X_test])
         error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error}
+        results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
         sio.savemat(outFile,results)
 	
 def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn'):
