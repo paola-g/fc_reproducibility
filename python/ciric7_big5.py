@@ -6,6 +6,7 @@ ciric7_rest1 = sio.loadmat(path+'fcMats_Ciric7_shen2013_REST1.mat')
 fcMatFile = path+'fcMats_Ciric7_shen2013_REST1.mat'
 subjects = ciric7_rest1['subjects']
 #config.outScore  = 'NEOFAC_A'
+df = pd.read_csv(config.behavFile)
 newdf = df[df['Subject'].isin([int(s) for s in subjects])]
 config.parcellationName = 'shen2013'
 
