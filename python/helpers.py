@@ -2534,6 +2534,7 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][iSub],idcode,regression))
         if op.isfile(outFile) and not config.overwrite:
             print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
+            iSub = iSub + 1	
             continue
         jobDir = op.join(config.DATADIR, config.subject,'MNINonLinear', 'Results','jobs')
         
