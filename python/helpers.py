@@ -2374,15 +2374,15 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         predScore = 'RMS'
     else:
         predScore = config.outScore
-    outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression))
+    outFile = op.join(config.DATADIR,'Results','{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression,config.release))
+
     if op.isfile(outFile) and not config.overwrite:
         print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
         return
-
-    df = pd.read_csv(config.behavFile)
-    subjects = data['subjects']
-    newdf = df[df['Subject'].isin([int(s) for s in subjects])]
-    score = np.ravel(newdf[config.outScore])
+    df          = pd.read_csv(config.behavFile)
+    subjects    = data['subjects']
+    newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
+    score       = np.ravel(newdf[config.outScore])
     fcMats      = data['fcMats']
     n_subs      = fcMats.shape[-1]
     train_index = np.setdiff1d(np.arange(n_subs),test_index)
@@ -2393,8 +2393,6 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
     edges       = np.zeros([n_subs,n_edges])
     for iSub in range(n_subs):
         edges[iSub,] = fcMats[:,:,iSub][triu_idx]
-
-    
  
     if motFile:
         motScore = np.loadtxt(motFile)
@@ -2529,10 +2527,10 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         predScore = 'RMS'
     else:
         predScore = config.outScore
-    print "Starting {} prediction...".format(predict)
+    print "Starting prediction..."
     iSub = 0
     for config.subject in subjects:
-        outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][iSub],idcode,regression))
+        outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][iSub],idcode,regression,config.release))
         if op.isfile(outFile) and not config.overwrite:
             print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
             iSub = iSub + 1	
@@ -2541,7 +2539,7 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         
         if not op.isdir(jobDir): 
             mkdir(jobDir)
-        jobName = 's{}_{}_iqpred'.format(config.subject,config.pipelineName)
+        jobName = 's{}_{}_{}_{}_{}_pred'.format(config.subject,config.pipelineName,config.parcellationName,predScore,config.release)
         # make a script
         thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
         thispythonfn += 'from helpers import *\n'
@@ -2556,10 +2554,13 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         thispythonfn += 'config.pipelineName     = "{}"\n'.format(config.pipelineName)
         thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
         thispythonfn += 'config.outScore         = "{}"\n'.format(config.outScore)
+        thispythonfn += 'config.release          = "{}"\n'.format(config.release)
+        thispythonfn += 'config.behavFile        = "{}"\n'.format(config.behavFile)
+        thispythonfn += 'config.overwrite        = {}\n'.format(config.overwrite)
         thispythonfn += 'print "========================="\n'
         thispythonfn += 'print "runPrediction(\'{}\', {}, thresh={})"\n'.format(fcMatFile, iSub, thresh)
         thispythonfn += 'print "========================="\n'
-        thispythonfn += 'runPrediction("{}", {}, thresh={}, model="{}", predict="{}", motFile="{}", idcode="{}" regression="{}")\n'.format(fcMatFile, iSub, thresh, model, predict,motFile, idcode)
+        thispythonfn += 'runPrediction("{}", {}, thresh={}, model="{}", predict="{}", motFile="{}", idcode="{}",regression="{}")\n'.format(fcMatFile, iSub, thresh, model, predict,motFile,idcode,regression)
         thispythonfn += 'logFid.close()\n'
         thispythonfn += 'END'
         # prepare the script
@@ -2583,13 +2584,13 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
             # call to fnSubmitToCluster
             JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(-100,config.sgeopts))
             config.joblist.append(JobID)
-            print 'submitted {} (SGE job #{})'.format(jobName,JobID)
+            #print 'submitted {} (SGE job #{})'.format(jobName,JobID)
             sys.stdout.flush()
         elif launchSubproc:
             sys.stdout.flush()
             process = Popen(thisScript,shell=True)
             config.joblist.append(process)
-            print 'submitted {}'.format(jobName)
+            #print 'submitted {}'.format(jobName)
         else:
             runPrediction(fcMatFile,iSub,thresh,model=model,predict=predict, motFile=motFile, idcode=idcode, regression=regression)
         
@@ -2614,7 +2615,8 @@ def runPipeline():
 
     if config.isCifti:
         # volume
-        volFile = config.fmriFile.replace('_Atlas','').replace('.dtseries.nii','.nii.gz')
+        volFile = op.join(buildpath(), config.fmriRun+'.nii.gz')
+        # volFile = config.fmriFile.replace('_MSMAll','').replace('_Atlas','').replace('.dtseries.nii','.nii.gz')
         print 'Loading [volume] data in memory... {}'.format(volFile)
         volData, nRows, nCols, nSlices, nTRs, affine, TR = load_img(volFile, maskAll) 
         # cifti
@@ -2821,20 +2823,12 @@ def runPipelinePar(launchSubproc=False):
                             
     precomputed = checkXML(config.fmriFile,config.steps,config.Flavors,buildpath()) 
 
-
     if precomputed and not config.overwrite:
-        do_makeGrayPlot = False
-        do_plotFC = False
+        do_makeGrayPlot    = False
+        do_plotFC          = False
         config.fmriFile_dn = precomputed
         if not op.isfile(config.fmriFile_dn.replace(config.ext,'_grayplot.png')):
             do_makeGrayPlot = True
-#        # temporary, to write parcellation with all voxels in mask
-#        toDelete = config.fmriFile_dn.replace(config.ext,'_'+config.parcellationName+'_fcMat.png')
-#        if op.isfile(toDelete):
-#            try:
-#                remove(toDelete)
-#            except OSError:
-#                pass
         if not op.isfile(config.fmriFile_dn.replace(config.ext,'_'+config.parcellationName+'_fcMat.png')):
             do_plotFC = True
         if (not do_plotFC) and (not do_makeGrayPlot):
@@ -2842,30 +2836,6 @@ def runPipelinePar(launchSubproc=False):
     else:   
         do_makeGrayPlot = True
         do_plotFC       = True
-#        # remove the precomputed file and associated xml
-#        if precomputed:
-#            try:
-#                remove(precomputed)
-#            except OSError:
-#                pass
-#            if not config.isCifti:
-#                try:
-#                    remove(op.join(op.dirname(precomputed),precomputed[-15:].replace(".nii.gz",".xml")))
-#                except OSError:
-#                    pass
-#                try:
-#                    remove(op.join(op.dirname(precomputed),"*"+precomputed[-15:].replace(".nii.gz","*.png")))
-#                except OSError:
-#                    pass
-#            else:
-#                try:
-#                    remove(op.join(op.dirname(precomputed),precomputed[-21:].replace(".dtseries.nii",".xml")))
-#                except OSError:
-#                    pass
-#                try:
-#                    remove(op.join(op.dirname(precomputed),"*"+precomputed[-21:].replace(".dtseries.nii","*.png")))
-#                except OSError:
-#                    pass
 
     if config.queue or launchSubproc:
         jobDir = op.join(buildpath(),'jobs')
