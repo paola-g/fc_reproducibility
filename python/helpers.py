@@ -2483,9 +2483,9 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)		
-        elnet = ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99],cv=cv,max_iter=1000)
+        elnet = ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99],cv=cv.split(X_train, bins_cv),max_iter=1000)
         elnet.fit(X_train,y_train)
-        prediction = elnet.predict([X_test])
+        prediction = elnet.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_}
         sio.savemat(outFile,results)
