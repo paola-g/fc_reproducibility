@@ -2499,7 +2499,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         cv = cross_validation.StratifiedKFold(n_splits=k)
         lasso = LassoCV(cv=cv.split(X_train, bins_cv))
         lasso.fit(X_train,y_train)
-        prediction = lasso.predict([X_test])
+        prediction = lasso.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_}
         sio.savemat(outFile,results)
@@ -2515,7 +2515,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])  
         grids = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv))
         grids.fit(X_train,y_train)
-        prediction = grids.predict([X_test])
+        prediction = grids.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
         sio.savemat(outFile,results)
