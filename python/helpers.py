@@ -2499,7 +2499,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         cv = cross_validation.StratifiedKFold(n_splits=k)
         lasso = LassoCV(cv=cv.split(X_train, bins_cv))
         lasso.fit(X_train,y_train)
-        prediction = lasso.predict([X_test])
+        prediction = lasso.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_}
         sio.savemat(outFile,results)
@@ -2515,7 +2515,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])  
         grids = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv))
         grids.fit(X_train,y_train)
-        prediction = grids.predict([X_test])
+        prediction = grids.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
         sio.savemat(outFile,results)
@@ -2527,7 +2527,7 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         predScore = 'RMS'
     else:
         predScore = config.outScore
-    print "Starting prediction..."
+    #print "Starting prediction..."
     iSub = 0
     for config.subject in subjects:
         outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][iSub],idcode,regression,config.release))
@@ -2961,7 +2961,7 @@ def runPipelinePar(launchSubproc=False):
     return True
 
 
-def checkProgress(pause=60):
+def checkProgress(pause=60,verbose=False):
     if len(config.joblist) != 0:
         while True:
             nleft = len(config.joblist)
@@ -2983,7 +2983,9 @@ def checkProgress(pause=60):
             if nleft == 0:
                 break
             else:
-                print 'Waiting for {} jobs to complete...'.format(nleft)
+                if verbose:
+                    print 'Waiting for {} jobs to complete...'.format(nleft)
             sleep(pause)
-    print 'All done!!' 
+    if verbose:
+        print 'All done!!' 
     return True
