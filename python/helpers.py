@@ -3,7 +3,9 @@ from __future__ import division
 # initialize variables
 class config(object):
     overwrite          = False
+    scriptlist         = list()
     joblist            = list()
+    tStamp             = ''
     useMemMap          = False
     steps              = {}
     Flavors            = {}
@@ -580,6 +582,38 @@ def conf2XML(inFile, dataDir, operations, startTime, endTime, fname):
         nodeFlavor.text = str(op[2])
     tree = ET.ElementTree(doc)
     tree.write(fname)
+
+def timestamp():
+   now          = time()
+   loctime      = localtime(now)
+   milliseconds = '%03d' % int((now - int(now)) * 1000)
+   return strftime('%Y%m%d%H%M%S', loctime) + milliseconds
+
+def fnSubmitJobArrayFromJobList():
+    config.tStamp = timestamp()
+    # make directory
+    mkdir('tmp{}'.format(config.tStamp))
+    # write a temporary file with the list of scripts to execute as an array job
+    with open(op.join('tmp{}'.format(config.tStamp),'scriptlist'),'w') as f:
+        f.write('\n'.join(config.scriptlist))
+    # write the .qsub file
+    with open(op.join('tmp{}'.format(config.tStamp),'qsub'),'w') as f:
+        f.write('#!/bin/sh\n')
+        f.write('#$ -t 1-{}\n'.format(len(config.scriptlist)))
+        f.write('#$ -cwd -V -N tmp{}\n'.format(config.tStamp))
+        f.write('#$ -e {}\n'.format(op.join('tmp{}'.format(config.tStamp),'err')))
+        f.write('#$ -o {}\n'.format(op.join('tmp{}'.format(config.tStamp),'out')))
+        f.write('#$ {}\n'.format(config.sgeopts))
+        f.write('SCRIPT=$(awk "NR==$SGE_TASK_ID" {})\n'.format(op.join('tmp{}'.format(config.tStamp),'scriptlist')))
+        f.write('bash $SCRIPT\n')
+    strCommand = 'qsub {}'.format(op.join('tmp{}'.format(config.tStamp),'qsub'))
+    # write down the command to a file in the job folder
+    with open(op.join('tmp{}'.format(config.tStamp),'cmd'),'w+') as f:
+        f.write(strCommand+'\n')
+    # execute the command
+    cmdOut = check_output(strCommand, shell=True)
+    config.scriptlist = []
+    return cmdOut.split()[2]    
     
 def fnSubmitToCluster(strScript, strJobFolder, strJobUID, resources):
     specifyqueue = ''
@@ -898,8 +932,11 @@ def checkXML(inFile, operations, params, resDir, useMostRecent=True):
             if len(root[2]) != np.sum([len(ops) for ops in operations.values()]):
                 continue
             for el in root[2]:
-                tvalue = tvalue and (el.attrib['name'] in operations[int(el[0].text)])
-                tvalue = tvalue and (el[1].text in [repr(param) for param in params[int(el[0].text)]])
+                try:
+                    tvalue = tvalue and (el.attrib['name'] in operations[int(el[0].text)])
+                    tvalue = tvalue and (el[1].text in [repr(param) for param in params[int(el[0].text)]])
+                except:
+                    tvalue = False
             if not tvalue:
                 continue
             else:    
@@ -2368,13 +2405,13 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 	
-def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn'):
+def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn',suffix=''):
     data        = sio.loadmat(fcMatFile)
     if predict=='motion':
         predScore = 'RMS'
     else:
         predScore = config.outScore
-    outFile = op.join(config.DATADIR,'Results','{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression,config.release))
+    outFile = op.join(config.DATADIR,'Results','{}_{}pred_{}_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression,config.release,suffix))
 
     if op.isfile(outFile) and not config.overwrite:
         print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
@@ -2520,7 +2557,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
         sio.savemat(outFile,results)
 	
-def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn'):
+def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn', suffix = ''):
     data        = sio.loadmat(fcMatFile)
     subjects    = data['subjects']
     if predict=='motion':
@@ -2529,8 +2566,9 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         predScore = config.outScore
     #print "Starting prediction..."
     iSub = 0
+    config.scriptlist = []
     for config.subject in subjects:
-        outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][iSub],idcode,regression,config.release))
+        outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][iSub],idcode,regression,config.release,suffix))
         if op.isfile(outFile) and not config.overwrite:
             print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
             iSub = iSub + 1	
@@ -2560,7 +2598,7 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         thispythonfn += 'print "========================="\n'
         thispythonfn += 'print "runPrediction(\'{}\', {}, thresh={})"\n'.format(fcMatFile, iSub, thresh)
         thispythonfn += 'print "========================="\n'
-        thispythonfn += 'runPrediction("{}", {}, thresh={}, model="{}", predict="{}", motFile="{}", idcode="{}",regression="{}")\n'.format(fcMatFile, iSub, thresh, model, predict,motFile,idcode,regression)
+        thispythonfn += 'runPrediction("{}", {}, thresh={}, model="{}", predict="{}", motFile="{}", idcode="{}",regression="{}",suffix="{}")\n'.format(fcMatFile, iSub, thresh, model, predict,motFile,idcode,regression,suffix)
         thispythonfn += 'logFid.close()\n'
         thispythonfn += 'END'
         # prepare the script
@@ -2582,8 +2620,8 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
 
         if config.queue:
             # call to fnSubmitToCluster
-            JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(-100,config.sgeopts))
-            config.joblist.append(JobID)
+            # JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(-100,config.sgeopts))
+            config.scriptlist.append(thisScript)
             #print 'submitted {} (SGE job #{})'.format(jobName,JobID)
             sys.stdout.flush()
         elif launchSubproc:
@@ -2595,8 +2633,10 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
             runPrediction(fcMatFile,iSub,thresh,model=model,predict=predict, motFile=motFile, idcode=idcode, regression=regression)
         
         iSub = iSub +1
-
-
+    # launch array job
+    JobID = fnSubmitJobArrayFromJobList()
+    print 'Running array job {} ({} sub jobs)'.format(JobID.split('.')[0],JobID.split('.')[1].split('-')[1].split(':')[0])
+    config.joblist.append(JobID.split('.')[0])
 
 #@profile
 def runPipeline():
@@ -2699,8 +2739,8 @@ def runPipeline():
     return
 
 def runPipelinePar(launchSubproc=False):
-
-    if config.queue: priority=-100
+    if config.queue: 
+        priority=-100
     config.suffix = '_hp2000_clean' if config.useFIX else '' 
     if config.isCifti:
         config.ext = '.dtseries.nii'
@@ -2913,10 +2953,10 @@ def runPipelinePar(launchSubproc=False):
     
         if config.queue:
             # call to fnSubmitToCluster
-            # JobID = fnSubmitToCluster(thisScript,jobDir, jobName, '-p {} -l h_vmem={} -l h_cpu={} -q {}'.format(priority,config.maxvmem,60*60*8,config.whichQueue))
-            JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(priority,config.sgeopts))
-            config.joblist.append(JobID)
-            print 'submitted {} (SGE job #{})'.format(jobName,JobID)
+            # JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(priority,config.sgeopts))
+            # config.joblist.append(JobID)
+            config.scriptlist.append(thisScript)
+            # print 'submitted {} (SGE job #{})'.format(jobName,JobID)
             sys.stdout.flush()
         elif launchSubproc:
             #print 'spawned python subprocess on local machine'
