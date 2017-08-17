@@ -2405,16 +2405,16 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 	
-def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn',suffix=''):
+def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn',outDir=''):
     data        = sio.loadmat(fcMatFile)
     if predict=='motion':
         predScore = 'RMS'
     else:
         predScore = config.outScore
-    outFile = op.join(config.DATADIR,'Results','{}_{}pred_{}_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression,config.release,suffix))
-
+    outFile = op.join(outDir,'{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][test_index],idcode,regression,config.release))
+# 
     if op.isfile(outFile) and not config.overwrite:
-        print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
+        # print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
         return
     df          = pd.read_csv(config.behavFile)
     subjects    = data['subjects']
@@ -2557,7 +2557,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
         sio.savemat(outFile,results)
 	
-def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn', suffix = ''):
+def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn', outDir = ''):
     data        = sio.loadmat(fcMatFile)
     subjects    = data['subjects']
     if predict=='motion':
@@ -2568,9 +2568,9 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
     iSub = 0
     config.scriptlist = []
     for config.subject in subjects:
-        outFile = op.join(config.DATADIR, '{}_{}pred_{}_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][iSub],idcode,regression,config.release,suffix))
+        outFile = op.join(outDir, '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, data['subjects'][iSub],idcode,regression,config.release))
         if op.isfile(outFile) and not config.overwrite:
-            print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
+            # print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
             iSub = iSub + 1	
             continue
         jobDir = op.join(config.DATADIR, config.subject,'MNINonLinear', 'Results','jobs')
@@ -2598,7 +2598,7 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         thispythonfn += 'print "========================="\n'
         thispythonfn += 'print "runPrediction(\'{}\', {}, thresh={})"\n'.format(fcMatFile, iSub, thresh)
         thispythonfn += 'print "========================="\n'
-        thispythonfn += 'runPrediction("{}", {}, thresh={}, model="{}", predict="{}", motFile="{}", idcode="{}",regression="{}",suffix="{}")\n'.format(fcMatFile, iSub, thresh, model, predict,motFile,idcode,regression,suffix)
+        thispythonfn += 'runPrediction("{}", {}, thresh={}, model="{}", predict="{}", motFile="{}", idcode="{}",regression="{}",outDir="{}")\n'.format(fcMatFile, iSub, thresh, model, predict,motFile,idcode,regression,outDir)
         thispythonfn += 'logFid.close()\n'
         thispythonfn += 'END'
         # prepare the script
@@ -2633,10 +2633,12 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
             runPrediction(fcMatFile,iSub,thresh,model=model,predict=predict, motFile=motFile, idcode=idcode, regression=regression)
         
         iSub = iSub +1
-    # launch array job
-    JobID = fnSubmitJobArrayFromJobList()
-    print 'Running array job {} ({} sub jobs)'.format(JobID.split('.')[0],JobID.split('.')[1].split('-')[1].split(':')[0])
-    config.joblist.append(JobID.split('.')[0])
+    
+    if len(config.scriptlist)>0:
+        # launch array job
+        JobID = fnSubmitJobArrayFromJobList()
+        #print 'Running array job {} ({} sub jobs)'.format(JobID.split('.')[0],JobID.split('.')[1].split('-')[1].split(':')[0])
+        config.joblist.append(JobID.split('.')[0])
 
 #@profile
 def runPipeline():
