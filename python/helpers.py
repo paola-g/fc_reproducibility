@@ -931,6 +931,11 @@ def checkXML(inFile, operations, params, resDir, useMostRecent=True):
                 continue
             if len(root[2]) != np.sum([len(ops) for ops in operations.values()]):
                 continue
+            try:
+                if max([int(el[0].text) for el in root[2]]) != len(operations):
+                    continue
+            except:
+               continue
             for el in root[2]:
                 try:
                     tvalue = tvalue and (el.attrib['name'] in operations[int(el[0].text)])
