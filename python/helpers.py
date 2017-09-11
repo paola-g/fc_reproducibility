@@ -2053,7 +2053,7 @@ def makeGrayPlot(displayPlot=False,overwrite=False):
                 call(cmd,shell=True)
             # print "makeGrayPlot -- converted orig cifti fMRI in {:0.2f}s".format(time()-t)
             # t=time()
-            Xgm = np.loadtxt(config.fmriFile.replace('.dtseries.nii','.tsv'),dtype=np.float32)
+            Xgm = pd.read_csv(config.fmriFile.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
             nTRs = Xgm.shape[1]
             # print "makeGrayPlot -- loaded orig cifti fMRI in {:0.2f}s".format(time()-t)
             # t=time()
@@ -2110,7 +2110,7 @@ def makeGrayPlot(displayPlot=False,overwrite=False):
                 call(cmd,shell=True)
             # print "makeGrayPlot -- converted denoised cifti fMRI in {:0.2f}s".format(time()-t)
             # t=time()
-            Xgm = np.loadtxt(config.fmriFile_dn.replace('.dtseries.nii','.tsv'),dtype=np.float32)
+            Xgm = pd.read_csv(config.fmriFile_dn.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
             nTRs = Xgm.shape[1]
             # print "makeGrayPlot -- loaded denoised cifti fMRI in {:0.2f}s".format(time()-t)
             # t=time()
@@ -2194,12 +2194,12 @@ def parcellate(overwrite=False):
                 cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile,
                                                                            config.fmriFile.replace('.dtseries.nii','.tsv'))
                 call(cmd, shell=True)
-            data = np.loadtxt(config.fmriFile.replace('.dtseries.nii','.tsv'));
+            data = pd.read_csv(config.fmriFile.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
         
         for iParcel in np.arange(config.nParcels):
             tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel+1))
             if not op.isfile(tsFile) or overwrite:
-                np.savetxt(tsFile,np.nanmean(data[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.6f',delimiter='\n')
+                np.savetxt(tsFile,np.nanmean(data[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.16f',delimiter='\n')
 
         # concatenate all ts
         print 'Concatenating data'
@@ -2220,20 +2220,21 @@ def parcellate(overwrite=False):
                 cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile_dn,
                                                                            config.fmriFile_dn.replace('.dtseries.nii','.tsv'))
                 call(cmd, shell=True)
-            data = np.loadtxt(config.fmriFile_dn.replace('.dtseries.nii','.tsv'));
+            data = pd.read_csv(config.fmriFile_dn.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
                    
         for iParcel in np.arange(config.nParcels):
             tsFile = op.join(tsDir,'parcel{:03d}_{}.txt'.format(iParcel+1,rstring))
             if not op.isfile(tsFile) or overwrite:
                 with open(tsFile,'w') as f_handle:
-                    np.savetxt(f_handle,np.nanmean(data[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.6f',delimiter='\n')
+                    tmpdata = data[np.where(allparcels==iParcel+1)[0],:]
+                    np.savetxt(f_handle,np.nanmean(tmpdata,axis=0),fmt='%.16f',delimiter='\n')
             # save all voxels in mask, with header indicating parcel number
             tsFileAll = op.join(tsDir,'parcel{:03d}_{}_all.txt'.format(iParcel+1,rstring))
             if not op.isfile(tsFileAll) or overwrite:
                 # nVox = np.where(allparcels==iParcel+1)[0].size
                 # np.savetxt(tsFileAll,(iParcel+1)*np.ones((1,nVox),dtype=np.int),fmt='%d',delimiter=',',newline='\n')
                 with open(tsFileAll,'w') as f_handle:
-                    np.savetxt(f_handle,np.transpose(data[np.where(allparcels==iParcel+1)[0],:]),fmt='%.6f',delimiter=',',newline='\n')
+                    np.savetxt(f_handle,np.transpose(data[np.where(allparcels==iParcel+1)[0],:]),fmt='%.16f',delimiter=',',newline='\n')
         # concatenate all ts
         print 'Concatenating data'
         cmd = 'paste '+op.join(tsDir,'parcel???_{}.txt'.format(rstring))+' > '+alltsFile
@@ -2671,7 +2672,7 @@ def runPipeline():
         if not op.isfile(config.fmriFile.replace('.dtseries.nii','.tsv')):
             cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile,config.fmriFile.replace('.dtseries.nii','.tsv'))
             call(cmd,shell=True)
-        data = np.loadtxt(config.fmriFile.replace('.dtseries.nii','.tsv'),dtype=np.float32)
+        data = pd.read_csv(config.fmriFile.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
     else:
         volFile = config.fmriFile
         print 'Loading [volume] data in memory... {}'.format(config.fmriFile)
