@@ -2411,6 +2411,252 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 	
+def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn',outDir=''):
+    data        = sio.loadmat(fcMatFile)
+    df          = pd.read_csv(config.behavFile)
+    subjects    = data['subjects']
+    newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
+    score       = np.ravel(newdf[config.outScore])
+    fcMats      = data['fcMats']
+    n_subs      = fcMats.shape[-1]
+    train_index = np.setdiff1d(np.arange(n_subs),test_index)
+    n_nodes     = fcMats.shape[0]
+    if predict=='motion':
+        predScore = 'RMS'
+    else:
+        predScore = config.outScore
+    outFile = op.join(outDir,'{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in data['subjects'][test_index]]),idcode,regression,config.release))
+# 
+    if op.isfile(outFile) and not config.overwrite:
+        # print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
+        return
+
+    triu_idx    = np.triu_indices(n_nodes,1)
+    n_edges     = len(triu_idx[1]);
+    edges       = np.zeros([n_subs,n_edges])
+    for iSub in range(n_subs):
+        edges[iSub,] = fcMats[:,:,iSub][triu_idx]
+ 
+    if motFile:
+        motScore = np.loadtxt(motFile)
+	
+    if regression=='Finn':
+        lr  = linear_model.LinearRegression()
+        if model=='IQ':
+            # select edges (positively and negatively) correlated with score with threshold thresh		
+            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+            idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+            idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+        elif model=='IQ-mot':
+            # select edges (positively and negatively) correlated with score but not correlated with motion
+            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+            pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
+            idx_iq_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+            idx_iq_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+            idx_mot = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]>thresh])
+            idx_filtered_pos = np.intersect1d(idx_iq_pos,idx_mot)
+            idx_filtered_neg = np.intersect1d(idx_iq_neg,idx_mot)
+        elif model=='IQ+mot':
+            # select edges (positively and negatively) correlated with both score and  motion
+            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+            pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
+            idx_iq_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+            idx_iq_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+            idx_mot_pos = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]>0])
+            idx_mot_neg  = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]<0])
+            idx_filtered_pos = np.intersect1d(idx_iq_pos,idx_mot_pos)
+            idx_filtered_neg = np.intersect1d(idx_iq_neg,idx_mot_neg)
+        elif model=='mot-IQ':
+            # select edges (positively and negatively) correlated with motion but not correlated with score
+            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+            pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
+            idx_iq = np.array([idx for idx in range(1,n_edges) if pears[idx][1]>thresh])
+            idx_mot_pos = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]>0])
+            idx_mot_neg  = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]<0])
+            idx_filtered_pos = np.intersect1d(idx_iq,idx_mot_pos)
+            idx_filtered_neg = np.intersect1d(idx_iq,idx_mot_neg)
+        elif model=='mot':
+            # computing partial correlation between edges and score, controlling for motion
+            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
+            idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
+            idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+        elif model=='parIQ':
+            # computing partial correlation between edges and motion, controlling for score
+            pcorrs = partial_corr(edges[train_index,:],score[train_index],motScore[train_index])
+            idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]>0])
+            idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]<0])
+        elif model=='parmot':
+            # computing partial correlation between edges and motion, controlling for motion
+            pcorrs = partial_corr(edges[train_index,:],motScore[train_index],score[train_index])
+            idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]>0])
+            idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]<0])
+        else:
+            print 'Warning! Wrong model, nothing was done.'
+            return
+						 
+        filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
+        filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
+        # compute network statistic for each subject in training
+        strength_pos = filtered_pos.sum(axis=1)
+        strength_neg = filtered_neg.sum(axis=1)
+        # compute network statistic for test subject
+        str_pos_test = edges[np.ix_(test_index,idx_filtered_pos)].sum(axis=1)
+        str_neg_test = edges[np.ix_(test_index,idx_filtered_neg)].sum(axis=1)
+        # regression
+        if predict=='motion': #otherwise config.outScore is predicted
+            score = motScore
+        lr_pos = lr.fit(strength_pos.reshape(-1,1),score[train_index])
+        predictions_pos = lr_pos.predict(str_pos_test.reshape(-1,1))
+        lr_neg = lr.fit(strength_neg.reshape(-1,1),score[train_index])
+        predictions_neg = lr_neg.predict(str_neg_test.reshape(-1,1))
+        print predictions_pos, predictions_neg
+        errors_pos = abs(predictions_pos-score[test_index])
+        errors_neg = abs(predictions_neg-score[test_index])
+
+        results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg, 'idx_filtered_pos':idx_filtered_pos, 'idx_filtered_neg':idx_filtered_neg}
+        sio.savemat(outFile,results)
+	
+    elif regression=='elnet':
+        k=4
+        n_bins_cv = 4
+        if predict=='motion': #otherwise config.outScore is predicted
+            score = motScore
+        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
+        cv = cross_validation.StratifiedKFold(n_splits=k)		
+        elnet = ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99],cv=cv.split(X_train, bins_cv),max_iter=1000)
+        elnet.fit(X_train,y_train)
+        prediction = elnet.predict(X_test)
+        error = abs(prediction-y_test)
+        results = {'pred':prediction, 'error':error, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_}
+        sio.savemat(outFile,results)
+	
+    elif regression=='lasso':
+        k=4
+        n_bins_cv = 4
+        if predict=='motion': #otherwise config.outScore is predicted
+            score = motScore
+        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
+        cv = cross_validation.StratifiedKFold(n_splits=k)
+        lasso = LassoCV(cv=cv.split(X_train, bins_cv))
+        lasso.fit(X_train,y_train)
+        prediction = lasso.predict(X_test)
+        error = abs(prediction-y_test)
+        results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_}
+        sio.savemat(outFile,results)
+	
+    elif regression=='svm':
+        param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
+        k=4
+        n_bins_cv = 5
+        svr = SVR(kernel='linear')
+        selector = RFECV(svr, step=round(0.10*edges.shape[1]), cv=5) #5-fold NOT stratified
+        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]		
+        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])  
+        grids = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv))
+        grids.fit(X_train,y_train)
+        prediction = grids.predict(X_test)
+        error = abs(prediction-y_test)
+        results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
+        sio.savemat(outFile,results)
+	
+def runPredictionParFamily(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn', outDir = ''):
+    data        = sio.loadmat(fcMatFile)
+    subjects    = data['subjects']
+    family = pd.read_csv('HCPfamily.csv')
+    newfamily = family[family['Subject'].isin([int(s) for s in subjects])]
+    df          = pd.read_csv(config.behavFile)
+    newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
+
+    if predict=='motion':
+        predScore = 'RMS'
+    else:
+        predScore = config.outScore
+    #print "Starting prediction..."
+    iSub = 0
+    config.scriptlist = []
+    for el in np.unique(newfamily['Family_ID']):
+        idx = np.array(newfamily.ix[newfamily['Family_ID']==el]['Subject'])
+        sidx = np.array(newdf.ix[newdf['Subject'].isin(idx)]['Subject'])
+        test_index = [np.where(np.in1d(subjects,str(elem)))[0][0] for elem in sidx]
+        outFile = op.join(outDir, '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % elem for elem in data['subjects'][test_index]]),idcode,regression,config.release))
+        if op.isfile(outFile) and not config.overwrite:
+            # print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
+            iSub = iSub + 1	
+            continue
+        jobDir = op.join(config.DATADIR, 'jobs')
+        
+        if not op.isdir(jobDir): 
+            mkdir(jobDir)
+        jobName = 'f{}_{}_{}_{}_{}_pred'.format(el,config.pipelineName,config.parcellationName,predScore,config.release)
+        # make a script
+        thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
+        thispythonfn += 'from helpers import *\n'
+        thispythonfn += 'logFid                  = open("{}","a+")\n'.format(op.join(jobDir,jobName+'.log'))
+        thispythonfn += 'sys.stdout              = logFid\n'
+        thispythonfn += 'sys.stderr              = logFid\n'
+        # print date and time stamp
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'print strftime("%Y-%m-%d %H:%M:%S", localtime())\n'
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'config.DATADIR          = "{}"\n'.format(config.DATADIR)
+        thispythonfn += 'config.pipelineName     = "{}"\n'.format(config.pipelineName)
+        thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
+        thispythonfn += 'config.outScore         = "{}"\n'.format(config.outScore)
+        thispythonfn += 'config.release          = "{}"\n'.format(config.release)
+        thispythonfn += 'config.behavFile        = "{}"\n'.format(config.behavFile)
+        thispythonfn += 'config.overwrite        = {}\n'.format(config.overwrite)
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'print "runPredictionFamily(\'{}\', {}, thresh={})"\n'.format(fcMatFile, iSub, thresh)
+        thispythonfn += 'print "========================="\n'
+        thispythonfn += 'runPredictionFamily("{}", {}, thresh={}, model="{}", predict="{}", motFile="{}", idcode="{}",regression="{}",outDir="{}")\n'.format(fcMatFile, '['+','.join(['%s' % num for num in test_index])+']', thresh, model, predict,motFile,idcode,regression,outDir)
+        thispythonfn += 'logFid.close()\n'
+        thispythonfn += 'END'
+        # prepare the script
+        thisScript=op.join(jobDir,jobName+'.sh')
+        while True:
+            if op.isfile(thisScript) and (not config.overwrite):
+                thisScript=thisScript.replace('.sh','+.sh') # use fsl feat convention
+            else:
+                break
+        with open(thisScript,'w') as fidw:
+            fidw.write('#!/bin/bash\n')
+            fidw.write('python {}\n'.format(thispythonfn))
+        cmd='chmod 774 '+thisScript
+        call(cmd,shell=True)
+
+        #this is a "hack" to make sure the .sh script exists before it is called... 
+        while not op.isfile(thisScript):
+            sleep(.05)
+
+        if config.queue:
+            # call to fnSubmitToCluster
+            # JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(-100,config.sgeopts))
+            config.scriptlist.append(thisScript)
+            #print 'submitted {} (SGE job #{})'.format(jobName,JobID)
+            sys.stdout.flush()
+        elif launchSubproc:
+            sys.stdout.flush()
+            process = Popen(thisScript,shell=True)
+            config.joblist.append(process)
+            #print 'submitted {}'.format(jobName)
+        else:
+            runPredictionFamily(fcMatFile,test_index,thresh,model=model,predict=predict, motFile=motFile, idcode=idcode, regression=regression)
+        
+        iSub = iSub +1
+    
+    if len(config.scriptlist)>0:
+        # launch array job
+        JobID = fnSubmitJobArrayFromJobList()
+        #print 'Running array job {} ({} sub jobs)'.format(JobID.split('.')[0],JobID.split('.')[1].split('-')[1].split(':')[0])
+        config.joblist.append(JobID.split('.')[0])
+
+
+
 def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn',outDir=''):
     data        = sio.loadmat(fcMatFile)
     if predict=='motion':
