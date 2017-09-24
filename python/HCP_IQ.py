@@ -5,27 +5,31 @@ from helpers import *
 config.DATADIR      = '/data2/jdubois2/data/HCP/MRI'
 
 # fMRI runs
-session = 'REST2'
+session = 'REST1'
+idcode = 'Q2_{}'.format(session)
 fmriRuns      = ['rfMRI_{}_LR'.format(session),'rfMRI_{}_RL'.format(session)]
 # use volume or surface data
 config.isCifti      = False
 
 config.overwrite    = False
 
-config.pipelineName = 'Finn'
+
+
+config.pipelineName = 'Ciric5'
 # use ICA-FIX input
 config.useFIX       = False
 config.preWhitening = False
-config.Operations   = config.operationDict['Finn']
+
+config.Operations   = config.operationDict['Ciric5']
 config.melodicFolder = op.join('#fMRIrun#_hp2000.ica','filtered_func_data.ica') #the code #fMRIrun# will be replaced
 config.movementRegressorsFile = 'Movement_Regressors_dt.txt'
 config.movementRelativeRMSFile = 'Movement_RelativeRMS.txt'
 # submit jobs with sge
-config.queue        = False
+config.queue        = True
 launchSubproc       = False
 # make sure to set memory requirements according to data size
 # 15G for HCP data!
-config.sgeopts='-l h_vmem=35G -l h="node1|node2"'
+config.sgeopts='-l h_vmem=30G -l h="node1|node2"'
 # whether to use memmapping (which involves unzipping)
 config.useMemMap    = False
 
@@ -89,12 +93,12 @@ for config.subject in subjects:
             print RelRMSMeanFile+' File missing'
             break
         i=i+1
-    if i==len(fmriRuns): # all RelRMSMeanFile exist
-        compSub[iSub]=True
-        if np.mean(RelRMSMean[iSub,:]) > 0.14:
-            print config.subject, ': too much motion, exclude'
-        else:
-            keepSub[iSub]=True
+        if i==len(fmriRuns): # all RelRMSMeanFile exist
+            compSub[iSub]=True
+            if np.mean(RelRMSMean[iSub,:]) > 0.14:
+                print config.subject, ': too much motion, exclude'
+            else:
+                keepSub[iSub]=True
     iSub=iSub+1
 
 rho1,p1 = stats.pearsonr(score[keepSub],np.mean(RelRMSMean[keepSub,:],axis=1))
@@ -116,6 +120,7 @@ print 'Keeping {} subjects [{} M]'.format(len(subjects),sum([g=='M' for g in gen
 
 keepSub = np.zeros((len(subjects)),dtype=np.bool_)
 iSub=0
+#for config.subject in ['109325']:
 for config.subject in subjects:
     iRun = 0
     for config.fmriRun in fmriRuns:
@@ -129,31 +134,20 @@ for config.subject in subjects:
 print 'Keeping {}/{} subjects'.format(np.sum(keepSub),len(subjects))
 score    = score[keepSub]
 
-if config.queue:
-    if len(config.joblist) != 0:
-        while True:
-            nleft = len(config.joblist)
-            for i in range(nleft):
-                myCmd = "qstat | grep ' {} '".format(config.joblist[i])
-                isEmpty = False
-                try:
-                    cmdOut = check_output(myCmd, shell=True)
-                except CalledProcessError as e:
-                    isEmpty = True
-                finally:
-                    if isEmpty:
-                        nleft = nleft-1
-            if nleft == 0:
-                break
-            else:
-                print 'Waiting for {} subjects to complete...'.format(nleft)
-            sleep(10)
-    print 'All done!!'
+
+
+if len(config.scriptlist)>0:
+    config.sgeopts      = '-l mem_free=25G' 
+    JobID = fnSubmitJobArrayFromJobList()
+    print 'Running array job {} ({} sub jobs)'.format(JobID.split('.')[0],JobID.split('.')[1].split('-')[1].split(':')[0])
+    config.joblist.append(JobID.split('.')[0])
+    checkProgress()
 
 print 'Computing FC...'
 fcMatFile = 'fcMats_{}_{}_{}'.format(config.pipelineName, config.parcellationName, session)
-if op.isfile('{}.mat'.format(fcMatFile)):
-    fcMats_dn = sio.loadmat(fcMatFile)['fcMats_{}_{}_{}'.format(config.pipelineName, config.parcellationName, session)]
+
+if op.isfile('{}.mat'.format(fcMatFile)) and not config.overwrite:
+    fcMats_dn = sio.loadmat(fcMatFile)['fcMats']
 else:
     fcMats_dn    = np.zeros((config.nParcels,config.nParcels,len(subjects),len(fmriRuns)),dtype=np.float32)
     config.queue =False
@@ -168,113 +162,57 @@ else:
                 tsDir = op.join(buildpath(),config.parcellationName,config.fmriRun+config.ext)
                 rstring = get_rcode(config.fmriFile_dn)
                 fcFile_dn = op.join(tsDir,'allParcels_{}_Pearson.txt'.format(rstring))
-                if not op.isfile(fcFile_dn): computeFC(True)
+                if not op.isfile(fcFile_dn) or config.overwrite: computeFC(True)
                 fcMats_dn[:,:,iSub,iRun] = np.genfromtxt(fcFile_dn,delimiter=",")
                 iRun = iRun+1
         iSub = iSub + 1
 
     fcMats_dn = np.squeeze(np.mean(np.arctanh(fcMats_dn),3))
     results = {}
-    results['fcMats_{}_{}_{}'.format(config.pipelineName, config.parcellationName, session)] = fcMats_dn
+    results['subjects']      = subjects
+    results['fcMats'] = fcMats_dn
     results[config.outScore] = np.asarray(score)
     sio.savemat(fcMatFile, results)
 
+
+
 print "Starting IQ prediction..."
-thresh = 0.01
-
-config.queue        = True
-config.sgeopts='-l h_vmem=2G -l h="node1|node2"'
-
-iSub = 0
-for config.subject in subjects:
-        jobDir = op.join(config.DATADIR, config.subject,'MNINonLinear', 'Results','jobs')
-        if not op.isdir(jobDir): 
-	        mkdir(jobDir)
-        jobName = 's{}_{}_iqpred'.format(config.subject,config.pipelineName)
-	# make a script
-	thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
-	thispythonfn += 'from helpers import *\n'
-	thispythonfn += 'logFid                  = open("{}","a+")\n'.format(op.join(jobDir,jobName+'.log'))
-	thispythonfn += 'sys.stdout              = logFid\n'
-	thispythonfn += 'sys.stderr              = logFid\n'
-	# print date and time stamp
-	thispythonfn += 'print "========================="\n'
-	thispythonfn += 'print strftime("%Y-%m-%d %H:%M:%S", localtime())\n'
-	thispythonfn += 'print "========================="\n'
-	thispythonfn += 'config.subject          = "{}"\n'.format(config.subject)
-	thispythonfn += 'config.DATADIR          = "{}"\n'.format(config.DATADIR)
-	thispythonfn += 'config.pipelineName     = "{}"\n'.format(config.pipelineName)
-	thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
-	thispythonfn += 'config.outScore = "{}"\n'.format(config.outScore)
-	thispythonfn += 'makePrediction("{}","{}", "{}", {}, thresh={})\n'.format(config.subject, session, fcMatFile, iSub, thresh)
-	thispythonfn += 'logFid.close()\n'
-	thispythonfn += 'END'
-
-	# prepare a script
-	thisScript=op.join(jobDir,jobName+'.sh')
-	while True:
-		if op.isfile(thisScript) and (not config.overwrite):
-			thisScript=thisScript.replace('.sh','+.sh') # use fsl feat convention
-		else:
-			break
-
-	with open(thisScript,'w') as fidw:
-		fidw.write('#!/bin/bash\n')
-		fidw.write('echo ${FSLSUBALREADYRUN}\n')
-		fidw.write('python {}\n'.format(thispythonfn))
-	cmd='chmod 774 '+thisScript
-	call(cmd,shell=True)
-
-	#this is a "hack" to make sure the .sh script exists before it is called... 
-	while not op.isfile(thisScript):
-		sleep(.05)
-
-	if config.queue:
-		# call to fnSubmitToCluster
-		JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(-100,config.sgeopts))
-		config.joblist.append(JobID)
-		print 'submitted {} (SGE job #{})'.format(jobName,JobID)
-		sys.stdout.flush()
-	elif launchSubproc:
-		#print 'spawned python subprocess on local machine'
-		sys.stdout.flush()
-		call(thisScript,shell=True)
-	else:
-		makePrediction(config.subject,session,fcMatFile,iSub,thresh=0.01)
-        iSub = iSub +1
-
-if config.queue:
-    if len(config.joblist) != 0:
-        while True:
-            nleft = len(config.joblist)
-            for i in range(nleft):
-                myCmd = "qstat | grep ' {} '".format(config.joblist[i])
-                isEmpty = False
-                try:
-                    cmdOut = check_output(myCmd, shell=True)
-                except CalledProcessError as e:
-                    isEmpty = True
-                finally:
-                    if isEmpty:
-                        nleft = nleft-1
-            if nleft == 0:
-                break
-            else:
-                print 'Waiting for {} subjects to complete...'.format(nleft)
-            sleep(10)
-    print 'All done!!'
-
-n_subs  = fcMats_dn.shape[-1]
-predictions_pos = np.zeros([n_subs,1])
-predictions_neg = np.zeros([n_subs,1])
-iSub = 0
-for config.subject in subjects:
-   results = sio.loadmat(op.join(config.DATADIR, 'IQpred_{}_{}_{}_{}.mat'.format(config.pipelineName, config.parcellationName, config.subject, session))) 
-   predictions_pos[iSub] = results['pred_pos']
-   predictions_neg[iSub] = results['pred_neg']
-   iSub = iSub + 1
-
-rho,p = stats.pearsonr(np.ravel(predictions_pos),np.squeeze(np.ravel(score)))
-results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'rho':rho, 'p': p}
-sio.savemat(op.join(config.DATADIR, 'IQpred_{}_{}_{}.mat'.format(config.pipelineName, config.parcellationName, session)),results)
-print 'Correlation score: rho {} p {}'.format(rho,p)
+# submit jobs with sge
+config.queue        = False
+config.overwrite = False
+launchSubproc = False
+config.sgeopts      = '-l mem_free=8G' 
+motFile = np.loadtxt('RMS_{}.txt'.format(session))
+# run the IQ prediction for each subject
+#for mode in ['IQ-mot', 'IQ+mot', 'mot-IQ']:
+family = pd.read_csv('HCPfamily.csv')
+newfamily = family[family['Subject'].isin([int(s) for s in subjects])]
+newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
+for regression in ['svm', 'lasso', 'elnet']:
+    runPredictionParFamily(fcMatFile,thresh=0.01, model='IQ', motFile='RMS_{}.txt'.format(session), idcode=idcode, regression=regression)
+    checkProgress()
+    # merge cross-validation folds, save results
+    n_subs          = len(subjects)
+    predictions_pos = np.zeros([n_subs,1])
+    predictions_neg = np.zeros([n_subs,1])
+    for el in np.unique(newfamily['Family_ID']):
+       idx = np.array(newfamily.ix[newfamily['Family_ID']==el]['Subject'])
+       sidx = np.array(newdf.ix[newdf['Subject'].isin(idx)]['Subject'])
+       test_index = [np.where(np.in1d(subjects,str(elem)))[0][0] for elem in sidx]
+       results = sio.loadmat(op.join('', '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in sidx]), idcode, regression, config.release))) 
+       if regression=='Finn':
+           predictions_neg[test_index] = results['pred_neg'].T
+           predictions_pos[test_index] = results['pred_pos'].T
+       else:
+           predictions_pos[test_index] = results['pred'].T
+    rho,p   = stats.pearsonr(np.ravel(predictions_pos),np.squeeze(np.ravel(score)))
+    print 'Correlation score {}: rho {} p {}'.format(config.outScore, rho,p)
+    # save result
+    if regression=='Finn':
+        results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'rho_pos':rho, 'p_pos': p}
+        rho,p   = stats.pearsonr(np.ravel(predictions_pos),np.squeeze(np.ravel(score)))
+        results['rho_neg'] = rho
+        results['p_neg'] = p
+    else:
+        results = {'pred':predictions_pos, 'rho_pos':rho, 'p_pos': p}   
+    sio.savemat(op.join('{}_{}pred_{}_{}_{}i_{}.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, idcode, regression)),results)
