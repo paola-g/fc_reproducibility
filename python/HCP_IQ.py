@@ -29,7 +29,7 @@ config.queue        = True
 launchSubproc       = False
 # make sure to set memory requirements according to data size
 # 15G for HCP data!
-config.sgeopts='-l h_vmem=30G -l h="node1|node2"'
+config.sgeopts='-l h_vmem=30G -pe openmp 6'
 # whether to use memmapping (which involves unzipping)
 config.useMemMap    = False
 
@@ -176,12 +176,15 @@ else:
 
 
 
+
+
+
 print "Starting IQ prediction..."
 # submit jobs with sge
-config.queue        = False
-config.overwrite = False
+config.queue        = True
+config.overwrite = True
 launchSubproc = False
-config.sgeopts      = '-l mem_free=8G' 
+config.sgeopts      = '-l mem_free=8G -pe openmp 6' 
 motFile = np.loadtxt('RMS_{}.txt'.format(session))
 # run the IQ prediction for each subject
 #for mode in ['IQ-mot', 'IQ+mot', 'mot-IQ']:
@@ -215,4 +218,4 @@ for regression in ['svm', 'lasso', 'elnet']:
         results['p_neg'] = p
     else:
         results = {'pred':predictions_pos, 'rho_pos':rho, 'p_pos': p}   
-    sio.savemat(op.join('{}_{}pred_{}_{}_{}i_{}.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, idcode, regression)),results)
+    sio.savemat(op.join('{}_{}pred_{}_{}_{}_{}_3.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, idcode, regression)),results)
