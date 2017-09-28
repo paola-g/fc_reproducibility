@@ -55,9 +55,15 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 from scipy.ndimage.morphology import binary_closing, binary_dilation, binary_erosion, binary_opening, generate_binary_structure
 from astropy.stats import LombScargle
 from sklearn.linear_model import LassoCV, ElasticNetCV
+from sklearn import linear_model
 from sklearn.svm import SVR
 from sklearn.feature_selection import RFECV
+from sklearn import feature_selection
 from sklearn.model_selection import GridSearchCV
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import RobustScaler
+from sklearn.externals.joblib import Memory as mem
+
 #from memory_profiler import profile
 #import multiprocessing as mp
 
@@ -2573,6 +2579,32 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
         sio.savemat(outFile,results)
+    elif regression=='mlr':
+        if predict=='motion': #otherwise config.outScore is predicted
+            score = motScore
+        n_bins_cv = 4
+        k = 4
+        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        rbX = RobustScaler()
+        X_train = rbX.fit_transform(X_train)
+        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
+        cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv)
+        mfilter = feature_selection.SelectPercentile(feature_selection.mutual_info_regression)
+        clf = Pipeline([('minfo', mfilter), ('lm', linear_model.LinearRegression())])
+        # Select the optimal percentage of features with grid search
+        clf = GridSearchCV(clf, {'minfo__percentile': [0.01, 0.5, 1]}, cv=cv)
+        clf.fit(X_train, y_train)  # set the best parameters
+        coef_ = clf.best_estimator_.steps[-1][1].coef_
+        coef_ = clf.best_estimator_.steps[0][1].inverse_transform(coef_.reshape(1, -1))
+        X_test = rbX.transform(X_test)
+        if len(X_test.shape) == 1:
+            X_test = X_test.reshape(1, -1)
+        prediction = clf.predict(X_test)
+        error = abs(prediction-y_test)
+        results = {'pred':prediction, 'error':error, 'coef':coef_,}
+        sio.savemat(outFile,results)
+
 	
 def runPredictionParFamily(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn', outDir = ''):
     data        = sio.loadmat(fcMatFile)
@@ -2828,6 +2860,32 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
         sio.savemat(outFile,results)
+    elif regression=='mlr':
+        if predict=='motion': #otherwise config.outScore is predicted
+            score = motScore
+        n_bins_cv = 4
+        k = 4
+        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        rbX = RobustScaler()
+        X_train = rbX.fit_transform(X_train)
+        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
+        cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv)
+        mfilter = feature_selection.SelectPercentile(feature_selection.mutual_info_regression)
+        clf = Pipeline([('minfo', mfilter), ('lm', linear_model.LinearRegression())])
+        # Select the optimal percentage of features with grid search
+        clf = GridSearchCV(clf, {'minfo__percentile': [0.01, 0.5, 1]}, cv=cv)
+        clf.fit(X_train, y_train)  # set the best parameters
+        coef_ = clf.best_estimator_.steps[-1][1].coef_
+        coef_ = clf.best_estimator_.steps[0][1].inverse_transform(coef_.reshape(1, -1))
+        X_test = rbX.transform(X_test)
+        if len(X_test.shape) == 1:
+            X_test = X_test.reshape(1, -1)
+        prediction = clf.predict(X_test)
+        error = abs(prediction-y_test)
+        results = {'pred':prediction, 'error':error, 'coef':coef_,}
+        sio.savemat(outFile,results)
+
 	
 def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn', outDir = ''):
     data        = sio.loadmat(fcMatFile)
