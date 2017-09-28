@@ -2549,16 +2549,23 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         sio.savemat(outFile,results)
 	
     elif regression=='svm':
+        if predict=='motion': #otherwise config.outScore is predicted
+            score = motScore
+        rbX = RobustScaler()
         param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
         k=4
-        n_bins_cv = 5
-        svr = SVR(kernel='linear')
-        selector = RFECV(svr, step=round(0.10*edges.shape[1]), cv=5) #5-fold NOT stratified
-        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]		
+        n_bins_cv = 4
+        svr = SVR(kernel='linear', epsilon=0.01)
+        selector = RFECV(svr, step=round(0.10*edges.shape[1]), cv=4) #4-fold NOT stratified
+        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        X_train = rbX.fit_transform(X_train)
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])  
         grids = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv))
         grids.fit(X_train,y_train)
+        X_test = rbX.transform(X_test)
+        if len(X_test.shape) == 1:
+            X_test = X_test.reshape(1, -1)
         prediction = grids.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
@@ -2794,16 +2801,23 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         sio.savemat(outFile,results)
 	
     elif regression=='svm':
+        if predict=='motion': #otherwise config.outScore is predicted
+            score = motScore
+        rbX = RobustScaler()
         param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
         k=4
-        n_bins_cv = 5
-        svr = SVR(kernel='linear')
-        selector = RFECV(svr, step=round(0.10*edges.shape[1]), cv=5) #5-fold NOT stratified
-        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]		
+        n_bins_cv = 4
+        svr = SVR(kernel='linear', epsilon=0.01)
+        selector = RFECV(svr, step=round(0.10*edges.shape[1]), cv=4) #4-fold NOT stratified
+        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        X_train = rbX.fit_transform(X_train)
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])  
         grids = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv))
         grids.fit(X_train,y_train)
+        X_test = rbX.transform(X_test)
+        if len(X_test.shape) == 1:
+            X_test = X_test.reshape(1, -1)
         prediction = grids.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
