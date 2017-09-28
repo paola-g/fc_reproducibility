@@ -2527,12 +2527,17 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         n_bins_cv = 4
         if predict=='motion': #otherwise config.outScore is predicted
             score = motScore
+        rbX = RobustScaler()
         X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        X_train = rbX.fit_transform(X_train)
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)		
-        elnet = ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99],cv=cv.split(X_train, bins_cv),max_iter=1000)
+        elnet = ElasticNetCV(l1_ratio=[.1, .2, .3, .4, .5, .9]],cv=cv.split(X_train, bins_cv),max_iter=1500)
         elnet.fit(X_train,y_train)
+        X_test = rbX.transform(X_test)
+        if len(X_test.shape) == 1:
+            X_test = X_test.reshape(1, -1)
         prediction = elnet.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_}
@@ -2808,12 +2813,17 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         n_bins_cv = 4
         if predict=='motion': #otherwise config.outScore is predicted
             score = motScore
+        rbX = RobustScaler()
         X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        X_train = rbX.fit_transform(X_train)
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)		
-        elnet = ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99],cv=cv.split(X_train, bins_cv),max_iter=1000)
+        elnet = ElasticNetCV(l1_ratio=[.1, .2, .3, .4, .5, .9]],cv=cv.split(X_train, bins_cv),max_iter=1500)
         elnet.fit(X_train,y_train)
+        X_test = rbX.transform(X_test)
+        if len(X_test.shape) == 1:
+            X_test = X_test.reshape(1, -1)
         prediction = elnet.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_}
