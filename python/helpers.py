@@ -2537,12 +2537,15 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         n_bins_cv = 4
         if predict=='motion': #otherwise config.outScore is predicted
             score = motScore
+        rbX = RobustScaler()
         X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        X_train = rbX.fit_transform(X_train)
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)
-        lasso = LassoCV(cv=cv.split(X_train, bins_cv))
-        lasso.fit(X_train,y_train)
+        lasso = LassoCV(cv=cv.split(X_train, bins_cv),alphas=[.1, .5, .7, .9, .95, .99])
+        lasso.fit(X_train,np.ravel(y_train))
+        X_test = rbX.transform(X_test)
         prediction = lasso.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_}
@@ -2789,12 +2792,15 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         n_bins_cv = 4
         if predict=='motion': #otherwise config.outScore is predicted
             score = motScore
+        rbX = RobustScaler()
         X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
+        X_train = rbX.fit_transform(X_train)
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)
-        lasso = LassoCV(cv=cv.split(X_train, bins_cv))
-        lasso.fit(X_train,y_train)
+        lasso = LassoCV(cv=cv.split(X_train, bins_cv),alphas=[.1, .5, .7, .9, .95, .99])
+        lasso.fit(X_train,np.ravel(y_train))
+        X_test = rbX.transform(X_test)
         prediction = lasso.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_}
