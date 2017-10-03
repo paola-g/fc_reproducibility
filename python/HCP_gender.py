@@ -118,9 +118,9 @@ print 'Keeping {} subjects [{} M]'.format(len(subjects),sum([g=='M' for g in gen
 
 f_idx = np.where(gender=='F')[0]
 m_idx = np.where(gender=='M')[0]
-equateGenders = False
+equateGenders = True
 if equateGenders:
-    max_size = min(f_idx.shape, m_idx.shape)
+    max_size = min(f_idx.shape, m_idx.shape)[0]
     f_score = score[f_idx[:max_size]]
     m_score = score[m_idx[:max_size]]
     f_motscore = np.mean(RelRMSMean[f_idx[:max_size],:], axis=0)
