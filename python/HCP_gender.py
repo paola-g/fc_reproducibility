@@ -118,21 +118,25 @@ print 'Keeping {} subjects [{} M]'.format(len(subjects),sum([g=='M' for g in gen
 
 f_idx = np.where(gender=='F')[0]
 m_idx = np.where(gender=='M')[0]
-equateGenders = True
+equateGenders = False
 if equateGenders:
     max_size = min(f_idx.shape, m_idx.shape)[0]
     f_score = score[f_idx[:max_size]]
     m_score = score[m_idx[:max_size]]
-    f_motscore = np.mean(RelRMSMean[f_idx[:max_size],:], axis=0)
-    m_motscore = np.mean(RelRMSMean[m_idx[:max_size],:], axis=0)
+    f_motscore = np.mean(RelRMSMean[f_idx[:max_size],:], axis=1)
+    m_motscore = np.mean(RelRMSMean[m_idx[:max_size],:], axis=1)
+    np.savetxt('RMS_{}_{}_F.txt'.format(session, config.release), f_motscore)
+    np.savetxt('RMS_{}_{}_M.txt'.format(session, config.release), m_motscore)
     f_subjects = subjects[f_idx[:max_size]]
     m_subjects = subjects[m_idx[:max_size]]
     suffix='eq' 
 else:
     f_score = score[f_idx]
     m_score = score[m_idx]
-    f_motscore = np.mean(RelRMSMean[f_idx,:], axis=0)
-    m_motscore = np.mean(RelRMSMean[m_idx,:], axis=0)
+    f_motscore = np.mean(RelRMSMean[f_idx,:], axis=1)
+    m_motscore = np.mean(RelRMSMean[m_idx,:], axis=1)
+    np.savetxt('RMS_{}_{}_F.txt'.format(session, config.release), f_motscore)
+    np.savetxt('RMS_{}_{}_M.txt'.format(session, config.release), m_motscore)
     f_subjects = subjects[f_idx]
     m_subjects = subjects[m_idx]
     suffix=''
@@ -209,7 +213,9 @@ config.overwrite = True
 launchSubproc = False
 #config.sgeopts      = '-l mem_free=8G -pe openmp 6' 
 config.sgeopts      = '-l mem_free=8G' 
-motFile = np.loadtxt('RMS_{}.txt'.format(session))
+motFile = 'RMS_{}_{}.txt'.format(session, config.release)
+if not op.isfile(motFile):
+    np.savetxt(motFile, np.mean(RelRMSMean, axis=1))
 # run the IQ prediction for each subject
 #for mode in ['IQ-mot', 'IQ+mot', 'mot-IQ']:
 family = pd.read_csv('HCPfamily.csv')
@@ -230,7 +236,7 @@ results = {}
 results['subjects']      = m_subjects
 results['fcMats'] = fcMats_m
 results[config.outScore] = m_score
-results['motscore'] = f_motscore
+results['motscore'] = m_motscore
 fcMatFile_M = '{}_{}{}'.format(fcMatFile, 'M', suffix)
 sio.savemat(fcMatFile_M, results)
 #### LADIES FIRST
@@ -238,7 +244,7 @@ sio.savemat(fcMatFile_M, results)
 regression = 'Finn'
 #for config.outScore in ['PMAT24_A_CR', 'NEOFAC_A', 'NEOFAC_O', 'NEOFAC_C', 'NEOFAC_N', 'NEOFAC_E']:
 for config.outScore in ['PMAT24_A_CR']:
-    runPredictionParFamily(fcMatFile_F,thresh=0.01, model='IQ', motFile='RMS_{}.txt'.format(session), idcode='', regression=regression, gender='F')
+    runPredictionParFamily(fcMatFile_F,thresh=0.01, model='IQ', motFile='RMS_{}_{}_F.txt'.format(session, config.release), idcode='', regression=regression, gender='F')
     checkProgress(pause=5, verbose=False)
     # merge cross-validation folds, save results
     n_subs          = len(f_subjects)
@@ -271,7 +277,7 @@ for config.outScore in ['PMAT24_A_CR']:
 regression = 'Finn'
 #for config.outScore in ['PMAT24_A_CR', 'NEOFAC_A', 'NEOFAC_O', 'NEOFAC_C', 'NEOFAC_N', 'NEOFAC_E']:
 for config.outScore in ['PMAT24_A_CR']:
-    runPredictionParFamily(fcMatFile_M,thresh=0.01,model='IQ',motFile='RMS_{}.txt'.format(session),idcode='',regression=regression,gender='M')
+    runPredictionParFamily(fcMatFile_M,thresh=0.01,model='IQ',motFile='RMS_{}_{}_M.txt'.format(session, config.release),idcode='',regression=regression,gender='M')
     checkProgress(pause=5, verbose=False)
     # merge cross-validation folds, save results
     n_subs          = len(m_subjects)
