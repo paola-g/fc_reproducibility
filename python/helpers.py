@@ -2431,7 +2431,7 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         predScore = 'RMS'
     else:
         predScore = config.outScore
-    outFile = op.join(outDir,'{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in data['subjects'][test_index]]),idcode,regression,config.release))
+    outFile = op.join(outDir,'{}_{}pred_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in data['subjects'][test_index]]),regression,config.release, idcode))
 # 
     if op.isfile(outFile) and not config.overwrite:
         # print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
@@ -2515,7 +2515,6 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         predictions_pos = lr_pos.predict(str_pos_test.reshape(-1,1))
         lr_neg = lr.fit(strength_neg.reshape(-1,1),score[train_index])
         predictions_neg = lr_neg.predict(str_neg_test.reshape(-1,1))
-        print predictions_pos, predictions_neg
         errors_pos = abs(predictions_pos-score[test_index])
         errors_neg = abs(predictions_neg-score[test_index])
 
@@ -2533,7 +2532,7 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)		
-        elnet = ElasticNetCV(l1_ratio=[.1, .2, .3, .4, .5, .9]],cv=cv.split(X_train, bins_cv),max_iter=1500)
+        elnet = ElasticNetCV(l1_ratio=[.1, .2, .3, .4, .5, .9],cv=cv.split(X_train, bins_cv),max_iter=1500)
         elnet.fit(X_train,y_train)
         X_test = rbX.transform(X_test)
         if len(X_test.shape) == 1:
@@ -2557,6 +2556,8 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         lasso = LassoCV(cv=cv.split(X_train, bins_cv),alphas=[.1, .5, .7, .9, .95, .99])
         lasso.fit(X_train,np.ravel(y_train))
         X_test = rbX.transform(X_test)
+        if len(X_test.shape) == 1:
+            X_test = X_test.reshape(1, -1)
         prediction = lasso.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_}
@@ -2611,10 +2612,12 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         sio.savemat(outFile,results)
 
 	
-def runPredictionParFamily(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn', outDir = ''):
+def runPredictionParFamily(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn', gender='', outDir = ''):
     data        = sio.loadmat(fcMatFile)
     subjects    = data['subjects']
     family = pd.read_csv('HCPfamily.csv')
+    if gender:
+        idcode= '{}_{}'.format(idcode, gender)
     newfamily = family[family['Subject'].isin([int(s) for s in subjects])]
     df          = pd.read_csv(config.behavFile)
     newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
@@ -2630,7 +2633,7 @@ def runPredictionParFamily(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFil
         idx = np.array(newfamily.ix[newfamily['Family_ID']==el]['Subject'])
         sidx = np.array(newdf.ix[newdf['Subject'].isin(idx)]['Subject'])
         test_index = [np.where(np.in1d(subjects,str(elem)))[0][0] for elem in sidx]
-        outFile = op.join(outDir, '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % elem for elem in data['subjects'][test_index]]),idcode,regression,config.release))
+        outFile = op.join(outDir, '{}_{}pred_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % elem for elem in data['subjects'][test_index]]),regression,config.release, idcode))
         if op.isfile(outFile) and not config.overwrite:
             # print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
             iSub = iSub + 1	
@@ -2639,7 +2642,7 @@ def runPredictionParFamily(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFil
         
         if not op.isdir(jobDir): 
             mkdir(jobDir)
-        jobName = 'f{}_{}_{}_{}_{}_pred'.format(el,config.pipelineName,config.parcellationName,predScore,config.release)
+        jobName = 'f{}_{}_{}_{}_{}_pred_{}'.format(el,config.pipelineName,config.parcellationName,predScore,config.release, regression)
         # make a script
         thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
         thispythonfn += 'from helpers import *\n'
@@ -2819,7 +2822,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)		
-        elnet = ElasticNetCV(l1_ratio=[.1, .2, .3, .4, .5, .9]],cv=cv.split(X_train, bins_cv),max_iter=1500)
+        elnet = ElasticNetCV(l1_ratio=[.1, .2, .3, .4, .5, .9],cv=cv.split(X_train, bins_cv),max_iter=1500)
         elnet.fit(X_train,y_train)
         X_test = rbX.transform(X_test)
         if len(X_test.shape) == 1:
