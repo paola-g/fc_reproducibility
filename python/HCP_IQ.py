@@ -6,7 +6,7 @@ config.DATADIR      = '/data2/jdubois2/data/HCP/MRI'
 
 # fMRI runs
 session = 'REST1'
-idcode = 'Q2_{}'.format(session)
+idcode = '{}'.format(session)
 fmriRuns      = ['rfMRI_{}_LR'.format(session),'rfMRI_{}_RL'.format(session)]
 # use volume or surface data
 config.isCifti      = False
@@ -29,7 +29,7 @@ config.queue        = True
 launchSubproc       = False
 # make sure to set memory requirements according to data size
 # 15G for HCP data!
-config.sgeopts='-l h_vmem=30G -pe openmp 6'
+config.sgeopts='-l h_vmem=25G'
 # whether to use memmapping (which involves unzipping)
 config.useMemMap    = False
 
@@ -41,7 +41,7 @@ config.nParcels         = 268
 # subject selection parameters
 config.behavFile = 'unrestricted_luckydjuju_11_17_2015_0_47_11.csv'
 config.release   = 'Q2'
-config.outScore  = 'PMAT24_A_CR'
+config.outScore  = 'NEOFAC_A'
 
 
 # # Subject selection
@@ -72,7 +72,7 @@ score = df[config.outScore]
 
 print 'Selected', str(df.shape[0]), 'from the release',config.release
 print 'Number of males is:', df[df['Gender']=='M'].shape[0]
-print 'Age range is', tmpAgeRanges[0].split('-')[0], '-', tmpAgeRanges[-1].split('-')[1]
+print 'Age range is', tmpAgeRanges
 
 # Exclusion of high-motion subjects
 # exclude subjects with >0.14 frame-to-frame head motion estimate averged across both rest runs (arbitrary threshold as in Finn et al 2015)
@@ -106,10 +106,10 @@ rho2,p2 = stats.pearsonr(score[compSub],np.mean(RelRMSMean[compSub,:],axis=1))
 print 'With all subjects: corr(IQ,motion) = {:.3f} (p = {:.3f})'.format(rho2,p2)
 print 'After discarding high movers: corr(IQ,motion) = {:.3f} (p = {:.3f})'.format(rho1,p1)
     
-subjects   = [subject for (subject, keep) in zip(subjects, keepSub) if keep]
+subjects   = np.array([subject for (subject, keep) in zip(subjects, keepSub) if keep])
 age        = age[keepSub]
 gender     = gender[keepSub]
-score      = score[keepSub]
+score      = np.array(score[keepSub])
 RelRMSMean = RelRMSMean[keepSub,:]
 print 'Keeping {} subjects [{} M]'.format(len(subjects),sum([g=='M' for g in gender]))
 
@@ -134,6 +134,7 @@ for config.subject in subjects:
 print 'Keeping {}/{} subjects'.format(np.sum(keepSub),len(subjects))
 score    = score[keepSub]
 
+checkProgress(pause=60, verbose=True)
 
 
 if len(config.scriptlist)>0:
@@ -144,7 +145,7 @@ if len(config.scriptlist)>0:
     checkProgress()
 
 print 'Computing FC...'
-fcMatFile = 'fcMats_{}_{}_{}'.format(config.pipelineName, config.parcellationName, session)
+fcMatFile = 'fcMats_{}_{}_{}_{}_test'.format(config.pipelineName, config.parcellationName, session, config.release)
 
 if op.isfile('{}.mat'.format(fcMatFile)) and not config.overwrite:
     fcMats_dn = sio.loadmat(fcMatFile)['fcMats']
@@ -184,38 +185,45 @@ print "Starting IQ prediction..."
 config.queue        = True
 config.overwrite = True
 launchSubproc = False
-config.sgeopts      = '-l mem_free=8G -pe openmp 6' 
+#config.sgeopts      = '-l mem_free=8G -pe openmp 6' 
+config.sgeopts      = '-l mem_free=8G' 
 motFile = np.loadtxt('RMS_{}.txt'.format(session))
 # run the IQ prediction for each subject
 #for mode in ['IQ-mot', 'IQ+mot', 'mot-IQ']:
 family = pd.read_csv('HCPfamily.csv')
 newfamily = family[family['Subject'].isin([int(s) for s in subjects])]
 newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
-for regression in ['svm', 'lasso', 'elnet']:
+#for regression in ['lasso','mlr','elnet','svm']:
+#for config.outScore in ['PMAT24_A_CR', 'NEOFAC_A', 'NEOFAC_O', 'NEOFAC_C', 'NEOFAC_N', 'NEOFAC_E']:
+regression = 'Finn'
+for regression in ['lasso','mlr','elnet','svm']:
     runPredictionParFamily(fcMatFile,thresh=0.01, model='IQ', motFile='RMS_{}.txt'.format(session), idcode=idcode, regression=regression)
-    checkProgress()
+    checkProgress(pause=5, verbose=True)
     # merge cross-validation folds, save results
     n_subs          = len(subjects)
     predictions_pos = np.zeros([n_subs,1])
     predictions_neg = np.zeros([n_subs,1])
     for el in np.unique(newfamily['Family_ID']):
+       print el
        idx = np.array(newfamily.ix[newfamily['Family_ID']==el]['Subject'])
        sidx = np.array(newdf.ix[newdf['Subject'].isin(idx)]['Subject'])
        test_index = [np.where(np.in1d(subjects,str(elem)))[0][0] for elem in sidx]
-       results = sio.loadmat(op.join('', '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in sidx]), idcode, regression, config.release))) 
+       results = sio.loadmat(op.join('', '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in sidx]), session, regression, config.release))) 
        if regression=='Finn':
            predictions_neg[test_index] = results['pred_neg'].T
            predictions_pos[test_index] = results['pred_pos'].T
        else:
            predictions_pos[test_index] = results['pred'].T
     rho,p   = stats.pearsonr(np.ravel(predictions_pos),np.squeeze(np.ravel(score)))
-    print 'Correlation score {}: rho {} p {}'.format(config.outScore, rho,p)
+    print 'Correlation score {} ({}): rho {} p {}'.format(config.outScore, regression, rho,p)
     # save result
     if regression=='Finn':
         results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'rho_pos':rho, 'p_pos': p}
-        rho,p   = stats.pearsonr(np.ravel(predictions_pos),np.squeeze(np.ravel(score)))
+        rho,p   = stats.pearsonr(np.ravel(predictions_neg),np.squeeze(np.ravel(score)))
+        print 'Correlation score {} ({}): rho {} p {} (neg)'.format(config.outScore, regression, rho,p)
         results['rho_neg'] = rho
         results['p_neg'] = p
     else:
-        results = {'pred':predictions_pos, 'rho_pos':rho, 'p_pos': p}   
-    sio.savemat(op.join('{}_{}pred_{}_{}_{}_{}_3.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, idcode, regression)),results)
+        results = {'pred':predictions_pos, 'rho_pos':rho, 'p_pos':p}   
+
+    sio.savemat(op.join('{}_{}pred_{}_{}_{}_{}_{}.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, config.release, session, regression)),results)

@@ -6,7 +6,7 @@ config.DATADIR      = '/data2/jdubois2/data/HCP/MRI'
 
 # fMRI runs
 session = 'REST1'
-idcode = 'Q2_{}'.format(session)
+idcode = '{}'.format(session)
 fmriRuns      = ['rfMRI_{}_LR'.format(session),'rfMRI_{}_RL'.format(session)]
 # use volume or surface data
 config.isCifti      = False
@@ -171,7 +171,7 @@ if len(config.scriptlist)>0:
     checkProgress()
 
 print 'Computing FC...'
-fcMatFile = 'fcMats_{}_{}_{}_{}'.format(config.pipelineName, config.parcellationName, session, config.release)
+fcMatFile = 'fcMats_{}_{}_{}_{}_gender'.format(config.pipelineName, config.parcellationName, session, config.release)
 
 if op.isfile('{}.mat'.format(fcMatFile)) and not config.overwrite:
     fcMats_dn = sio.loadmat(fcMatFile)['fcMats']
@@ -244,7 +244,7 @@ sio.savemat(fcMatFile_M, results)
 regression = 'Finn'
 #for config.outScore in ['PMAT24_A_CR', 'NEOFAC_A', 'NEOFAC_O', 'NEOFAC_C', 'NEOFAC_N', 'NEOFAC_E']:
 for config.outScore in ['PMAT24_A_CR']:
-    runPredictionParFamily(fcMatFile_F,thresh=0.01, model='IQ', motFile='RMS_{}_{}_F.txt'.format(session, config.release), idcode='', regression=regression, gender='F')
+    runPredictionParFamily(fcMatFile_F,thresh=0.01, model='IQ', motFile='RMS_{}_{}_F.txt'.format(session, config.release), idcode=idcode, regression=regression, gender='F')
     checkProgress(pause=5, verbose=False)
     # merge cross-validation folds, save results
     n_subs          = len(f_subjects)
@@ -254,7 +254,7 @@ for config.outScore in ['PMAT24_A_CR']:
        idx = np.array(newfamily_f.ix[newfamily_f['Family_ID']==el]['Subject'])
        sidx = np.array(newdf_f.ix[newdf_f['Subject'].isin(idx)]['Subject'])
        test_index = [np.where(np.in1d(f_subjects,str(elem)))[0][0] for elem in sidx]
-       results = sio.loadmat(op.join('', '{}_{}pred_{}_{}_{}_{}_{}_F.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in sidx]), regression, config.release))) 
+       results = sio.loadmat(op.join('', '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in sidx]), idcode+'_F', regression, config.release))) 
        if regression=='Finn':
            predictions_neg[test_index] = results['pred_neg'].T
            predictions_pos[test_index] = results['pred_pos'].T
@@ -277,7 +277,7 @@ for config.outScore in ['PMAT24_A_CR']:
 regression = 'Finn'
 #for config.outScore in ['PMAT24_A_CR', 'NEOFAC_A', 'NEOFAC_O', 'NEOFAC_C', 'NEOFAC_N', 'NEOFAC_E']:
 for config.outScore in ['PMAT24_A_CR']:
-    runPredictionParFamily(fcMatFile_M,thresh=0.01,model='IQ',motFile='RMS_{}_{}_M.txt'.format(session, config.release),idcode='',regression=regression,gender='M')
+    runPredictionParFamily(fcMatFile_M,thresh=0.01,model='IQ',motFile='RMS_{}_{}_M.txt'.format(session, config.release),idcode=idcode,regression=regression,gender='M')
     checkProgress(pause=5, verbose=False)
     # merge cross-validation folds, save results
     n_subs          = len(m_subjects)
@@ -287,7 +287,7 @@ for config.outScore in ['PMAT24_A_CR']:
        idx = np.array(newfamily_m.ix[newfamily_m['Family_ID']==el]['Subject'])
        sidx = np.array(newdf_m.ix[newdf_m['Subject'].isin(idx)]['Subject'])
        test_index = [np.where(np.in1d(m_subjects,str(elem)))[0][0] for elem in sidx]
-       results = sio.loadmat(op.join('', '{}_{}pred_{}_{}_{}_{}_{}_M.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in sidx]), regression, config.release))) 
+       results = sio.loadmat(op.join('', '{}_{}pred_{}_{}_{}_{}_{}_{}.mat'.format('IQ',config.outScore,config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in sidx]), idcode+'_M', regression, config.release))) 
        if regression=='Finn':
            predictions_neg[test_index] = results['pred_neg'].T
            predictions_pos[test_index] = results['pred_pos'].T
