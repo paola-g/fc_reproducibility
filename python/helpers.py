@@ -2422,7 +2422,7 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
     df          = pd.read_csv(config.behavFile)
     subjects    = data['subjects']
     newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
-    score       = np.ravel(newdf[config.outScore])
+    score       = np.array(np.ravel(newdf[config.outScore]))
     fcMats      = data['fcMats']
     n_subs      = fcMats.shape[-1]
     train_index = np.setdiff1d(np.arange(n_subs),test_index)
@@ -2431,7 +2431,7 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         predScore = 'RMS'
     else:
         predScore = config.outScore
-    outFile = op.join(outDir,'{}_{}pred_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in data['subjects'][test_index]]),regression,config.release, idcode))
+    outFile = op.join(outDir,'{}_{}pred_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in data['subjects'][test_index]]),idcode,regression,config.release))
 # 
     if op.isfile(outFile) and not config.overwrite:
         # print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
@@ -2633,7 +2633,7 @@ def runPredictionParFamily(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFil
         idx = np.array(newfamily.ix[newfamily['Family_ID']==el]['Subject'])
         sidx = np.array(newdf.ix[newdf['Subject'].isin(idx)]['Subject'])
         test_index = [np.where(np.in1d(subjects,str(elem)))[0][0] for elem in sidx]
-        outFile = op.join(outDir, '{}_{}pred_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % elem for elem in data['subjects'][test_index]]),regression,config.release, idcode))
+        outFile = op.join(outDir, '{}_{}pred_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % elem for elem in data['subjects'][test_index]]),idcode, regression,config.release))
         if op.isfile(outFile) and not config.overwrite:
             # print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
             iSub = iSub + 1	
@@ -2721,7 +2721,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
     df          = pd.read_csv(config.behavFile)
     subjects    = data['subjects']
     newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
-    score       = np.ravel(newdf[config.outScore])
+    score       = np.array(np.ravel(newdf[config.outScore]))
     fcMats      = data['fcMats']
     n_subs      = fcMats.shape[-1]
     train_index = np.setdiff1d(np.arange(n_subs),test_index)
