@@ -2417,7 +2417,7 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 	
-def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn',outDir=''):
+def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn',outDir='', regressIQ=False):
     data        = sio.loadmat(fcMatFile)
     df          = pd.read_csv(config.behavFile)
     subjects    = data['subjects']
@@ -2431,6 +2431,12 @@ def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict=
         predScore = 'RMS'
     else:
         predScore = config.outScore
+    if regressIQ:
+        iqScore = np.ravel(np.array(newdf['PMAT24_A_CR']))
+        fit = linalg.lstsq(iqScore[:,np.newaxis], score)[0]
+        fittedvalues = iqScore*fit
+        score = score - fittedvalues
+        np.savetxt('resid_{}_{}_{}.txt'.format(config.outScore,config.release, idcode), score)
     outFile = op.join(outDir,'{}_{}pred_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in data['subjects'][test_index]]),idcode,regression,config.release))
 # 
     if op.isfile(outFile) and not config.overwrite:
