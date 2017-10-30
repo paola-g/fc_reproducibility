@@ -43,7 +43,7 @@ import scipy.linalg as linalg
 import string
 import random
 import xml.etree.cElementTree as ET
-from time import localtime, strftime, sleep, time, ctime
+from time import localtime, strftime, sleep, time
 from scipy.spatial.distance import pdist, squareform
 import socket
 import fnmatch
@@ -54,18 +54,10 @@ import glob
 from statsmodels.nonparametric.smoothers_lowess import lowess
 from scipy.ndimage.morphology import binary_closing, binary_dilation, binary_erosion, binary_opening, generate_binary_structure
 from astropy.stats import LombScargle
-from sklearn.linear_model import LassoCV, ElasticNetCV, RidgeCV
-from sklearn import linear_model
+from sklearn.linear_model import LassoCV, ElasticNetCV
 from sklearn.svm import SVR
 from sklearn.feature_selection import RFECV
-from sklearn import feature_selection
 from sklearn.model_selection import GridSearchCV
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import RobustScaler
-from sklearn.externals.joblib import Memory as mem
-from sklearn.covariance import MinCovDet
-import seaborn as sns
-
 #from memory_profiler import profile
 #import multiprocessing as mp
 
@@ -594,8 +586,8 @@ def conf2XML(inFile, dataDir, operations, startTime, endTime, fname):
 def timestamp():
    now          = time()
    loctime      = localtime(now)
-   milliseconds = '%03d' % int((now - int(now)) * 1000)
-   return strftime('%Y%m%d%H%M%S', loctime) + milliseconds
+   microseconds = '%06d' % int((now - int(now)) * 1000000)
+   return strftime('%m%d%H%M%S', loctime) + microseconds
 
 def fnSubmitJobArrayFromJobList():
     config.tStamp = timestamp()
@@ -614,7 +606,7 @@ def fnSubmitJobArrayFromJobList():
         f.write('#$ {}\n'.format(config.sgeopts))
         f.write('SCRIPT=$(awk "NR==$SGE_TASK_ID" {})\n'.format(op.join('tmp{}'.format(config.tStamp),'scriptlist')))
         f.write('bash $SCRIPT\n')
-    strCommand = 'ssh csclprd3s1 "cd {};qsub {}"'.format(getcwd(),op.join('tmp{}'.format(config.tStamp),'qsub'))
+    strCommand = 'qsub {}'.format(op.join('tmp{}'.format(config.tStamp),'qsub'))
     # write down the command to a file in the job folder
     with open(op.join('tmp{}'.format(config.tStamp),'cmd'),'w+') as f:
         f.write(strCommand+'\n')
@@ -928,6 +920,7 @@ def sorted_ls(path, reverseOrder):
 	
 def checkXML(inFile, operations, params, resDir, useMostRecent=True):
     fileList = sorted_ls(resDir, useMostRecent)
+    allPrecomputed = []
     for xfile in fileList:
         if fnmatch.fnmatch(op.join(resDir,xfile), op.join(resDir,'????????.xml')):
             tree = ET.parse(op.join(resDir,xfile))
@@ -939,11 +932,6 @@ def checkXML(inFile, operations, params, resDir, useMostRecent=True):
                 continue
             if len(root[2]) != np.sum([len(ops) for ops in operations.values()]):
                 continue
-            try:
-                if max([int(el[0].text) for el in root[2]]) != len(operations):
-                    continue
-            except:
-               continue
             for el in root[2]:
                 try:
                     tvalue = tvalue and (el.attrib['name'] in operations[int(el[0].text)])
@@ -954,8 +942,11 @@ def checkXML(inFile, operations, params, resDir, useMostRecent=True):
                 continue
             else:    
                 rcode = xfile.replace('.xml','')
-                return op.join(resDir,config.fmriRun+'_prepro_'+rcode+config.ext)
-    return None
+                allPrecomputed.append(op.join(resDir,config.fmriRun+'_prepro_'+rcode+config.ext))
+    if len(allPrecomputed)==0:
+        return [None]
+    else:
+        return allPrecomputed
 
 def get_rcode(mystring):
     if not config.isCifti:
@@ -2062,7 +2053,7 @@ def makeGrayPlot(displayPlot=False,overwrite=False):
                 call(cmd,shell=True)
             # print "makeGrayPlot -- converted orig cifti fMRI in {:0.2f}s".format(time()-t)
             # t=time()
-            Xgm = pd.read_csv(config.fmriFile.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
+            Xgm = np.loadtxt(config.fmriFile.replace('.dtseries.nii','.tsv'),dtype=np.float32)
             nTRs = Xgm.shape[1]
             # print "makeGrayPlot -- loaded orig cifti fMRI in {:0.2f}s".format(time()-t)
             # t=time()
@@ -2119,7 +2110,7 @@ def makeGrayPlot(displayPlot=False,overwrite=False):
                 call(cmd,shell=True)
             # print "makeGrayPlot -- converted denoised cifti fMRI in {:0.2f}s".format(time()-t)
             # t=time()
-            Xgm = pd.read_csv(config.fmriFile_dn.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
+            Xgm = np.loadtxt(config.fmriFile_dn.replace('.dtseries.nii','.tsv'),dtype=np.float32)
             nTRs = Xgm.shape[1]
             # print "makeGrayPlot -- loaded denoised cifti fMRI in {:0.2f}s".format(time()-t)
             # t=time()
@@ -2165,7 +2156,6 @@ def makeGrayPlot(displayPlot=False,overwrite=False):
         plt.close(fig)
 
 def parcellate(overwrite=False):
-    print "entering parcellate (overwrite={})".format(overwrite)
     # After preprocessing, functional connectivity is computed
     tsDir = op.join(buildpath(),config.parcellationName)
     if not op.isdir(tsDir): mkdir(tsDir)
@@ -2204,12 +2194,12 @@ def parcellate(overwrite=False):
                 cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile,
                                                                            config.fmriFile.replace('.dtseries.nii','.tsv'))
                 call(cmd, shell=True)
-            data = pd.read_csv(config.fmriFile.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
+            data = np.loadtxt(config.fmriFile.replace('.dtseries.nii','.tsv'));
         
         for iParcel in np.arange(config.nParcels):
             tsFile = op.join(tsDir,'parcel{:03d}.txt'.format(iParcel+1))
             if not op.isfile(tsFile) or overwrite:
-                np.savetxt(tsFile,np.nanmean(data[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.16f',delimiter='\n')
+                np.savetxt(tsFile,np.nanmean(data[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.6f',delimiter='\n')
 
         # concatenate all ts
         print 'Concatenating data'
@@ -2230,35 +2220,32 @@ def parcellate(overwrite=False):
                 cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile_dn,
                                                                            config.fmriFile_dn.replace('.dtseries.nii','.tsv'))
                 call(cmd, shell=True)
-            data = pd.read_csv(config.fmriFile_dn.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
+            data = np.loadtxt(config.fmriFile_dn.replace('.dtseries.nii','.tsv'));
                    
         for iParcel in np.arange(config.nParcels):
             tsFile = op.join(tsDir,'parcel{:03d}_{}.txt'.format(iParcel+1,rstring))
             if not op.isfile(tsFile) or overwrite:
                 with open(tsFile,'w') as f_handle:
-                    tmpdata = data[np.where(allparcels==iParcel+1)[0],:]
-                    np.savetxt(f_handle,np.nanmean(tmpdata,axis=0),fmt='%.16f',delimiter='\n')
-            # # save all voxels in mask, with header indicating parcel number
-            # tsFileAll = op.join(tsDir,'parcel{:03d}_{}_all.txt'.format(iParcel+1,rstring))
-            # if not op.isfile(tsFileAll) or overwrite:
-            #     # nVox = np.where(allparcels==iParcel+1)[0].size
-            #     # np.savetxt(tsFileAll,(iParcel+1)*np.ones((1,nVox),dtype=np.int),fmt='%d',delimiter=',',newline='\n')
-            #     with open(tsFileAll,'w') as f_handle:
-            #         np.savetxt(f_handle,np.transpose(data[np.where(allparcels==iParcel+1)[0],:]),fmt='%.16f',delimiter=',',newline='\n')
+                    np.savetxt(f_handle,np.nanmean(data[np.where(allparcels==iParcel+1)[0],:],axis=0),fmt='%.6f',delimiter='\n')
+            # save all voxels in mask, with header indicating parcel number
+            tsFileAll = op.join(tsDir,'parcel{:03d}_{}_all.txt'.format(iParcel+1,rstring))
+            if not op.isfile(tsFileAll) or overwrite:
+                # nVox = np.where(allparcels==iParcel+1)[0].size
+                # np.savetxt(tsFileAll,(iParcel+1)*np.ones((1,nVox),dtype=np.int),fmt='%d',delimiter=',',newline='\n')
+                with open(tsFileAll,'w') as f_handle:
+                    np.savetxt(f_handle,np.transpose(data[np.where(allparcels==iParcel+1)[0],:]),fmt='%.6f',delimiter=',',newline='\n')
         # concatenate all ts
         print 'Concatenating data'
         cmd = 'paste '+op.join(tsDir,'parcel???_{}.txt'.format(rstring))+' > '+alltsFile
         call(cmd, shell=True)
 
 def computeFC(overwrite=False):
-    print "entering computeFC (overwrite={})".format(overwrite)
+    parcellate(overwrite)
     tsDir = op.join(buildpath(),config.parcellationName,config.fmriRun+config.ext)
     ###################
     # original
     ###################
     alltsFile = op.join(tsDir,'allParcels.txt')
-    if not op.isfile(alltsFile):
-        parcellate(overwrite)
     fcFile    = alltsFile.replace('.txt','_Pearson.txt')
     if not op.isfile(fcFile) or overwrite:
         ts = np.loadtxt(alltsFile)
@@ -2272,17 +2259,9 @@ def computeFC(overwrite=False):
     ###################
     rstring = get_rcode(config.fmriFile_dn)
     alltsFile = op.join(tsDir,'allParcels_{}.txt'.format(rstring))
-    if not op.isfile(alltsFile):
-        parcellate(overwrite)
     fcFile    = alltsFile.replace('.txt','_Pearson.txt')
     if not op.isfile(fcFile) or overwrite:
         ts = np.loadtxt(alltsFile)
-        # censor time points that need censoring
-        if config.doScrubbing:
-            censored = np.loadtxt(op.join(buildpath(), 'Censored_TimePoints_{}.txt'.format(config.pipelineName)), dtype=np.dtype(np.int32))
-            censored = np.atleast_1d(censored)
-            tokeep = np.setdiff1d(np.arange(ts.shape[0]),censored)
-            ts = ts[tokeep,:]
         # correlation
         corrMat = np.corrcoef(ts,rowvar=0)
         np.fill_diagonal(corrMat,1)
@@ -2290,7 +2269,7 @@ def computeFC(overwrite=False):
         np.savetxt(fcFile,corrMat,fmt='%.6f',delimiter=',')
       
 def plotFC(displayPlot=False,overwrite=False):
-    print "entering plotFC (overwrite={})".format(overwrite)
+
     savePlotFile=config.fmriFile_dn.replace(config.ext,'_'+config.parcellationName+'_fcMat.png')
 
     if not op.isfile(savePlotFile) or overwrite:
@@ -2332,11 +2311,13 @@ def plotFC(displayPlot=False,overwrite=False):
         fig.colorbar(im, cax=cbar_ax)
         # save figure
         fig.savefig(savePlotFile, bbox_inches='tight')
+
     else:
         image = mpimg.imread(savePlotFile)
         fig = plt.figure(figsize=(20,7.5))
         plt.axis("off")
         plt.imshow(image)
+    
     #
     if displayPlot:
         plt.show(fig)
@@ -2429,302 +2410,6 @@ def plotDeltaR(fcMats,fcMats_dn, idcode=''):
     fig.savefig(savePlotFile, bbox_inches='tight')
     #plt.show(fig)
 	
-def runPredictionFamily(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn',outDir='', regressIQ=False):
-    data        = sio.loadmat(fcMatFile)
-    df          = pd.read_csv(config.behavFile)
-    subjects    = data['subjects']
-    newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
-    score       = np.array(np.ravel(newdf[config.outScore]))
-    fcMats      = data['fcMats']
-    n_subs      = fcMats.shape[-1]
-    train_index = np.setdiff1d(np.arange(n_subs),test_index)
-    n_nodes     = fcMats.shape[0]
-    if predict=='motion':
-        predScore = 'RMS'
-    else:
-        predScore = config.outScore
-    if regressIQ:
-        iqScore = np.ravel(np.array(newdf['PMAT24_A_CR']))
-        fit = linalg.lstsq(iqScore[:,np.newaxis], score)[0]
-        fittedvalues = iqScore*fit
-        score = score - fittedvalues
-        np.savetxt('resid_{}_{}_{}.txt'.format(config.outScore,config.release, idcode), score)
-    outFile = op.join(outDir,'{}_{}pred_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % el for el in data['subjects'][test_index]]),idcode,regression,config.release))
-# 
-    if op.isfile(outFile) and not config.overwrite:
-        # print 'Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][test_index])
-        return
-
-    triu_idx    = np.triu_indices(n_nodes,1)
-    n_edges     = len(triu_idx[1]);
-    edges       = np.zeros([n_subs,n_edges])
-    for iSub in range(n_subs):
-        edges[iSub,] = fcMats[:,:,iSub][triu_idx]
- 
-    if motFile:
-        motScore = np.loadtxt(motFile)
-	
-    if regression=='Finn':
-        lr  = linear_model.LinearRegression()
-        if model=='IQ':
-            # select edges (positively and negatively) correlated with score with threshold thresh		
-            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
-            idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
-            idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
-        elif model=='IQ-mot':
-            # select edges (positively and negatively) correlated with score but not correlated with motion
-            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
-            pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
-            idx_iq_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
-            idx_iq_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
-            idx_mot = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]>thresh])
-            idx_filtered_pos = np.intersect1d(idx_iq_pos,idx_mot)
-            idx_filtered_neg = np.intersect1d(idx_iq_neg,idx_mot)
-        elif model=='IQ+mot':
-            # select edges (positively and negatively) correlated with both score and  motion
-            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
-            pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
-            idx_iq_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
-            idx_iq_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
-            idx_mot_pos = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]>0])
-            idx_mot_neg  = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]<0])
-            idx_filtered_pos = np.intersect1d(idx_iq_pos,idx_mot_pos)
-            idx_filtered_neg = np.intersect1d(idx_iq_neg,idx_mot_neg)
-        elif model=='mot-IQ':
-            # select edges (positively and negatively) correlated with motion but not correlated with score
-            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
-            pears_mot = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
-            idx_iq = np.array([idx for idx in range(1,n_edges) if pears[idx][1]>thresh])
-            idx_mot_pos = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]>0])
-            idx_mot_neg  = np.array([idx for idx in range(1,n_edges) if pears_mot[idx][1]<thresh and pears[idx][0]<0])
-            idx_filtered_pos = np.intersect1d(idx_iq,idx_mot_pos)
-            idx_filtered_neg = np.intersect1d(idx_iq,idx_mot_neg)
-        elif model=='mot':
-            # computing partial correlation between edges and score, controlling for motion
-            pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),motScore[train_index]) for j in range(0,n_edges)]
-            idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
-            idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
-        elif model=='parIQ':
-            # computing partial correlation between edges and motion, controlling for score
-            pcorrs = partial_corr(edges[train_index,:],score[train_index],motScore[train_index])
-            idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]>0])
-            idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]<0])
-        elif model=='parmot':
-            # computing partial correlation between edges and motion, controlling for motion
-            pcorrs = partial_corr(edges[train_index,:],motScore[train_index],score[train_index])
-            idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]>0])
-            idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pcorrs[idx][1]<thresh and pcorrs[idx][0]<0])
-        else:
-            print 'Warning! Wrong model, nothing was done.'
-            return
-						 
-        filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
-        filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
-        # compute network statistic for each subject in training
-        strength_pos = filtered_pos.sum(axis=1)
-        strength_neg = filtered_neg.sum(axis=1)
-        # compute network statistic for test subject
-        str_pos_test = edges[np.ix_(test_index,idx_filtered_pos)].sum(axis=1)
-        str_neg_test = edges[np.ix_(test_index,idx_filtered_neg)].sum(axis=1)
-        # regression
-        if predict=='motion': #otherwise config.outScore is predicted
-            score = motScore
-        lr_pos = lr.fit(strength_pos.reshape(-1,1),score[train_index])
-        predictions_pos = lr_pos.predict(str_pos_test.reshape(-1,1))
-        lr_neg = lr.fit(strength_neg.reshape(-1,1),score[train_index])
-        predictions_neg = lr_neg.predict(str_neg_test.reshape(-1,1))
-        errors_pos = abs(predictions_pos-score[test_index])
-        errors_neg = abs(predictions_neg-score[test_index])
-
-        results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg, 'idx_filtered_pos':idx_filtered_pos, 'idx_filtered_neg':idx_filtered_neg}
-        sio.savemat(outFile,results)
-	
-    elif regression=='elnet':
-        k=4
-        n_bins_cv = 4
-        if predict=='motion': #otherwise config.outScore is predicted
-            score = motScore
-        rbX = RobustScaler()
-        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
-        X_train = rbX.fit_transform(X_train)
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
-        cv = cross_validation.StratifiedKFold(n_splits=k)		
-        elnet = ElasticNetCV(l1_ratio=[.1, .2, .3, .4, .5, .9],cv=cv.split(X_train, bins_cv),max_iter=1500)
-        elnet.fit(X_train,y_train)
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = elnet.predict(X_test)
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_}
-        sio.savemat(outFile,results)
-	
-    elif regression=='lasso':
-        k=4
-        n_bins_cv = 4
-        if predict=='motion': #otherwise config.outScore is predicted
-            score = motScore
-        rbX = RobustScaler()
-        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
-        X_train = rbX.fit_transform(X_train)
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
-        cv = cross_validation.StratifiedKFold(n_splits=k)
-        lasso = LassoCV(cv=cv.split(X_train, bins_cv),alphas=[.1, .5, .7, .9, .95, .99])
-        lasso.fit(X_train,np.ravel(y_train))
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = lasso.predict(X_test)
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_}
-        sio.savemat(outFile,results)
-	
-    elif regression=='svm':
-        if predict=='motion': #otherwise config.outScore is predicted
-            score = motScore
-        rbX = RobustScaler()
-        param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
-        k=4
-        n_bins_cv = 4
-        svr = SVR(kernel='linear', epsilon=0.01)
-        selector = RFECV(svr, step=round(0.10*edges.shape[1]), cv=4) #4-fold NOT stratified
-        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
-        X_train = rbX.fit_transform(X_train)
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])  
-        grids = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv))
-        grids.fit(X_train,y_train)
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = grids.predict(X_test)
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
-        sio.savemat(outFile,results)
-    elif regression=='mlr':
-        if predict=='motion': #otherwise config.outScore is predicted
-            score = motScore
-        n_bins_cv = 4
-        k = 4
-        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
-        rbX = RobustScaler()
-        X_train = rbX.fit_transform(X_train)
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
-        cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv)
-        mfilter = feature_selection.SelectPercentile(feature_selection.mutual_info_regression)
-        clf = Pipeline([('minfo', mfilter), ('lm', linear_model.LinearRegression())])
-        # Select the optimal percentage of features with grid search
-        clf = GridSearchCV(clf, {'minfo__percentile': [0.01, 0.5, 1]}, cv=cv)
-        clf.fit(X_train, y_train)  # set the best parameters
-        coef_ = clf.best_estimator_.steps[-1][1].coef_
-        coef_ = clf.best_estimator_.steps[0][1].inverse_transform(coef_.reshape(1, -1))
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = clf.predict(X_test)
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':coef_,}
-        sio.savemat(outFile,results)
-
-	
-def runPredictionParFamily(fcMatFile, thresh=0.01, model='IQ', predict='PMAT24_A_CR', motFile='', launchSubproc=False, idcode='', regression='Finn', gender='', outDir = ''):
-    data        = sio.loadmat(fcMatFile)
-    subjects    = data['subjects']
-    family      = pd.read_csv('HCPfamily.csv')
-    if gender:
-        idcode= '{}_{}'.format(idcode, gender)
-    newfamily = family[family['Subject'].isin([int(s) for s in subjects])]
-    df          = pd.read_csv(config.behavFile)
-    newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
-
-    if predict=='motion':
-        predScore = 'RMS'
-    else:
-        predScore = config.outScore
-    #print "Starting prediction..."
-    iSub = 0
-    config.scriptlist = []
-    for el in np.unique(newfamily['Family_ID']):
-        idx = np.array(newfamily.ix[newfamily['Family_ID']==el]['Subject'])
-        sidx = np.array(newdf.ix[newdf['Subject'].isin(idx)]['Subject'])
-        test_index = [np.where(np.in1d(subjects,str(elem)))[0][0] for elem in sidx]
-        outFile = op.join(outDir, '{}_{}pred_{}_{}_{}_{}_{}{}.mat'.format(model,predScore, config.pipelineName, config.parcellationName, '_'.join(['%s' % elem for elem in data['subjects'][test_index]]),idcode, regression,config.release))
-        if op.isfile(outFile) and not config.overwrite:
-            # print ('Prediction already computed for subject {}. Using existing file...'.format(data['subjects'][iSub]))
-            iSub = iSub + 1	
-            continue
-        jobDir = op.join(config.DATADIR, 'jobs')
-        
-        if not op.isdir(jobDir): 
-            mkdir(jobDir)
-        jobName = 'f{}_{}_{}_{}_{}_pred_{}'.format(el,config.pipelineName,config.parcellationName,predScore,config.release, regression)
-        # make a script
-        thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
-        thispythonfn += 'from helpers import *\n'
-        thispythonfn += 'logFid                  = open("{}","a+")\n'.format(op.join(jobDir,jobName+'.log'))
-        thispythonfn += 'sys.stdout              = logFid\n'
-        thispythonfn += 'sys.stderr              = logFid\n'
-        # print date and time stamp
-        thispythonfn += 'print "========================="\n'
-        thispythonfn += 'print strftime("%Y-%m-%d %H:%M:%S", localtime())\n'
-        thispythonfn += 'print "========================="\n'
-        thispythonfn += 'config.DATADIR          = "{}"\n'.format(config.DATADIR)
-        thispythonfn += 'config.pipelineName     = "{}"\n'.format(config.pipelineName)
-        thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
-        thispythonfn += 'config.outScore         = "{}"\n'.format(config.outScore)
-        thispythonfn += 'config.release          = "{}"\n'.format(config.release)
-        thispythonfn += 'config.behavFile        = "{}"\n'.format(config.behavFile)
-        thispythonfn += 'config.overwrite        = {}\n'.format(config.overwrite)
-        thispythonfn += 'print "========================="\n'
-        thispythonfn += 'print "runPredictionFamily(\'{}\', {}, thresh={})"\n'.format(fcMatFile, iSub, thresh)
-        thispythonfn += 'print "========================="\n'
-        thispythonfn += 'runPredictionFamily("{}", {}, thresh={}, model="{}", predict="{}", motFile="{}", idcode="{}",regression="{}",outDir="{}")\n'.format(fcMatFile, '['+','.join(['%s' % num for num in test_index])+']', thresh, model, predict,motFile,idcode,regression,outDir)
-        thispythonfn += 'logFid.close()\n'
-        thispythonfn += 'END'
-        # prepare the script
-        thisScript=op.join(jobDir,jobName+'.sh')
-        while True:
-            if op.isfile(thisScript) and (not config.overwrite):
-                thisScript=thisScript.replace('.sh','+.sh') # use fsl feat convention
-            else:
-                break
-        with open(thisScript,'w') as fidw:
-            fidw.write('#!/bin/bash\n')
-            fidw.write('python {}\n'.format(thispythonfn))
-        cmd='chmod 774 '+thisScript
-        call(cmd,shell=True)
-
-        #this is a "hack" to make sure the .sh script exists before it is called... 
-        while not op.isfile(thisScript):
-            sleep(.05)
-
-        if config.queue:
-            # call to fnSubmitToCluster
-            # JobID = fnSubmitToCluster(thisScript, jobDir, jobName, '-p {} {}'.format(-100,config.sgeopts))
-            config.scriptlist.append(thisScript)
-            #print 'submitted {} (SGE job #{})'.format(jobName,JobID)
-            sys.stdout.flush()
-        elif launchSubproc:
-            sys.stdout.flush()
-            process = Popen(thisScript,shell=True)
-            config.joblist.append(process)
-            #print 'submitted {}'.format(jobName)
-        else:
-            runPredictionFamily(fcMatFile,test_index,thresh,model=model,predict=predict, motFile=motFile, idcode=idcode, regression=regression)
-        
-        iSub = iSub +1
-    
-    if len(config.scriptlist)>0:
-        # launch array job
-        JobID = fnSubmitJobArrayFromJobList()
-        #print 'Running array job {} ({} sub jobs)'.format(JobID.split('.')[0],JobID.split('.')[1].split('-')[1].split(':')[0])
-        config.joblist.append(JobID.split('.')[0])
-
-
-
 def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', motFile='', idcode='', regression='Finn',outDir=''):
     data        = sio.loadmat(fcMatFile)
     if predict=='motion':
@@ -2739,7 +2424,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
     df          = pd.read_csv(config.behavFile)
     subjects    = data['subjects']
     newdf       = df[df['Subject'].isin([int(s) for s in subjects])]
-    score       = np.array(np.ravel(newdf[config.outScore]))
+    score       = np.ravel(newdf[config.outScore])
     fcMats      = data['fcMats']
     n_subs      = fcMats.shape[-1]
     train_index = np.setdiff1d(np.arange(n_subs),test_index)
@@ -2761,6 +2446,7 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
             pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
             idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]>0])
             idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<thresh and pears[idx][0]<0])
+            print "{} positively correlated edges, {} negatively correlated edges".format(idx_filtered_pos.shape[0],idx_filtered_neg.shape[0])
         elif model=='IQ-mot':
             # select edges (positively and negatively) correlated with score but not correlated with motion
             pears = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
@@ -2808,23 +2494,33 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
             print 'Warning! Wrong model, nothing was done.'
             return
 						 
-        filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
-        filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
-        # compute network statistic for each subject in training
-        strength_pos = filtered_pos.sum(axis=1)
-        strength_neg = filtered_neg.sum(axis=1)
-        # compute network statistic for test subject
-        str_pos_test = edges[test_index,idx_filtered_pos].sum()
-        str_neg_test = edges[test_index,idx_filtered_neg].sum()
         # regression
         if predict=='motion': #otherwise config.outScore is predicted
             score = motScore
-        lr_pos = lr.fit(strength_pos.reshape(-1,1),score[train_index])
-        predictions_pos = lr_pos.predict(str_pos_test)
-        lr_neg = lr.fit(strength_neg.reshape(-1,1),score[train_index])
-        predictions_neg = lr_neg.predict(str_neg_test)
-        errors_pos = abs(predictions_pos-score[test_index])
-        errors_neg = abs(predictions_neg-score[test_index])
+    
+        if idx_filtered_pos.shape[0]>0:
+            filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
+            # compute network statistic for each subject in training
+            strength_pos = filtered_pos.sum(axis=1)
+            # compute network statistic for test subject
+            str_pos_test = edges[test_index,idx_filtered_pos].sum()
+            lr_pos = lr.fit(strength_pos.reshape(-1,1),score[train_index])
+            predictions_pos = lr_pos.predict(str_pos_test)
+            errors_pos = abs(predictions_pos-score[test_index])
+        else:
+            predictions_pos = np.nan
+            errors_pos      = np.nan
+        
+        if idx_filtered_neg.shape[0]>0:
+            filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
+            strength_neg = filtered_neg.sum(axis=1)
+            str_neg_test = edges[test_index,idx_filtered_neg].sum()
+            lr_neg = lr.fit(strength_neg.reshape(-1,1),score[train_index])
+            predictions_neg = lr_neg.predict(str_neg_test)
+            errors_neg = abs(predictions_neg-score[test_index])
+        else:
+            predictions_neg = np.nan
+            errors_neg      = np.nan
 
         results = {'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_pos':errors_pos, 'errors_neg':errors_neg, 'idx_filtered_pos':idx_filtered_pos, 'idx_filtered_neg':idx_filtered_neg}
         sio.savemat(outFile,results)
@@ -2834,17 +2530,12 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         n_bins_cv = 4
         if predict=='motion': #otherwise config.outScore is predicted
             score = motScore
-        rbX = RobustScaler()
         X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
-        X_train = rbX.fit_transform(X_train)
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)		
-        elnet = ElasticNetCV(l1_ratio=[.1, .2, .3, .4, .5, .9],cv=cv.split(X_train, bins_cv),max_iter=1500)
+        elnet = ElasticNetCV(l1_ratio=[.1, .5, .7, .9, .95, .99],cv=cv.split(X_train, bins_cv),max_iter=1000)
         elnet.fit(X_train,y_train)
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
         prediction = elnet.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_}
@@ -2855,68 +2546,32 @@ def runPrediction(fcMatFile, test_index, thresh=0.01, model='IQ', predict='IQ', 
         n_bins_cv = 4
         if predict=='motion': #otherwise config.outScore is predicted
             score = motScore
-        rbX = RobustScaler()
         X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
-        X_train = rbX.fit_transform(X_train)
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
         cv = cross_validation.StratifiedKFold(n_splits=k)
-        lasso = LassoCV(cv=cv.split(X_train, bins_cv),alphas=[.1, .5, .7, .9, .95, .99])
-        lasso.fit(X_train,np.ravel(y_train))
-        X_test = rbX.transform(X_test)
+        lasso = LassoCV(cv=cv.split(X_train, bins_cv))
+        lasso.fit(X_train,y_train)
         prediction = lasso.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_}
         sio.savemat(outFile,results)
 	
     elif regression=='svm':
-        if predict=='motion': #otherwise config.outScore is predicted
-            score = motScore
-        rbX = RobustScaler()
         param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
         k=4
-        n_bins_cv = 4
-        svr = SVR(kernel='linear', epsilon=0.01)
-        selector = RFECV(svr, step=round(0.10*edges.shape[1]), cv=4) #4-fold NOT stratified
-        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
-        X_train = rbX.fit_transform(X_train)
+        n_bins_cv = 5
+        svr = SVR(kernel='linear')
+        selector = RFECV(svr, step=round(0.10*edges.shape[1]), cv=5) #5-fold NOT stratified
+        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]		
         hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
         bins_cv = np.digitize(y_train, bin_limits_cv[:-1])  
         grids = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv))
         grids.fit(X_train,y_train)
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
         prediction = grids.predict(X_test)
         error = abs(prediction-y_test)
         results = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_ }
         sio.savemat(outFile,results)
-    elif regression=='mlr':
-        if predict=='motion': #otherwise config.outScore is predicted
-            score = motScore
-        n_bins_cv = 4
-        k = 4
-        X_train, X_test, y_train, y_test = edges[train_index,], edges[test_index,], score[train_index], score[test_index]
-        rbX = RobustScaler()
-        X_train = rbX.fit_transform(X_train)
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
-        cv = cross_validation.StratifiedKFold(n_splits=k).split(X_train, bins_cv)
-        mfilter = feature_selection.SelectPercentile(feature_selection.mutual_info_regression)
-        clf = Pipeline([('minfo', mfilter), ('lm', linear_model.LinearRegression())])
-        # Select the optimal percentage of features with grid search
-        clf = GridSearchCV(clf, {'minfo__percentile': [0.01, 0.5, 1]}, cv=cv)
-        clf.fit(X_train, y_train)  # set the best parameters
-        coef_ = clf.best_estimator_.steps[-1][1].coef_
-        coef_ = clf.best_estimator_.steps[0][1].inverse_transform(coef_.reshape(1, -1))
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = clf.predict(X_test)
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':coef_,}
-        sio.savemat(outFile,results)
-
 	
 def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',launchSubproc=False, idcode='', regression='Finn', outDir = ''):
     data        = sio.loadmat(fcMatFile)
@@ -2964,11 +2619,7 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         thispythonfn += 'END'
         # prepare the script
         thisScript=op.join(jobDir,jobName+'.sh')
-        while True:
-            if op.isfile(thisScript) and (not config.overwrite):
-                thisScript=thisScript.replace('.sh','+.sh') # use fsl feat convention
-            else:
-                break
+        
         with open(thisScript,'w') as fidw:
             fidw.write('#!/bin/bash\n')
             fidw.write('python {}\n'.format(thispythonfn))
@@ -3001,359 +2652,6 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         #print 'Running array job {} ({} sub jobs)'.format(JobID.split('.')[0],JobID.split('.')[1].split('-')[1].split(':')[0])
         config.joblist.append(JobID.split('.')[0])
 
-
-def runPredictionJD(fcMatFile, dataFile, test_index, filterThr=0.01, iPerm=0, SM='PMAT24_A_CR', idcode='', model='Finn',outDir='',confounds=['gender','age','age^2','gender*age','gender*age^2','brainsize','motion','recon'],):
-    data         = sio.loadmat(fcMatFile)
-    fcMats       = data['fcMats_'+idcode.split('_')[0]]
-    n_subs       = fcMats.shape[-1]
-    n_nodes      = fcMats.shape[0]
-
-    df          = pd.read_csv(dataFile)
-    score       = np.array(np.ravel(df[SM]))
-
-    train_index = np.setdiff1d(np.arange(n_subs),test_index)
-    
-    # REMOVE CONFOUNDS
-    conMat = None
-    if len(confounds)>0:
-        for confound in confounds:
-            if confound == 'gender':
-                conVec = df['Gender']
-            elif confound == 'age':
-                conVec = df['Age_in_Yrs']
-            elif confound == 'age^2':
-                conVec = np.square(df['Age_in_Yrs'])
-            elif confound == 'gender*age':
-                conVec = np.multiply(df['Gender'],df['Age_in_Yrs'])
-            elif confound == 'gender*age^2':
-                conVec = np.multiply(df['Gender'],np.square(df['Age_in_Yrs']))
-            elif confound == 'brainsize':
-                conVec = df['FS_BrainSeg_Vol']
-            elif confound == 'motion':
-                conVec = df['FDsum_'+idcode.split('_')[0]]
-            elif confound == 'recon':
-                conVec = df['fMRI_3T_ReconVrs']
-            elif confound == 'PMAT24_A_CR':
-                conVec = df['PMAT24_A_CR']
-            # add to conMat
-            if conMat is None:
-                conMat = np.array(np.ravel(conVec))
-            else:
-                print confound,conMat.shape,conVec.shape
-                conMat = np.vstack((conMat,conVec))
-        # if only one confound, transform to matrix
-        if len(confounds)==1:
-            conMat = conMat[:,np.newaxis]
-        else:
-            conMat = conMat.T
-
-        corrBef = []
-        for i in range(len(confounds)):
-            corrBef.append(stats.pearsonr(conMat[:,i].T,score)[0])
-        print 'maximum corr before decon: ',max(corrBef)
-
-        # JD: SWITCH TO SKLEARN.LINEAR_MODEL and FIT INTERCEPT!
-        # WE NEED TO LEARN THE RELATIONSHIP ON TRAINING DATA ONLY!
-        # fit          = linalg.lstsq(conMat[train_index,:], score[train_index])[0]
-        regr        = linear_model.LinearRegression()
-        regr.fit(conMat[train_index,:], score[train_index])
-        # THEN, APPLY TO ALL
-        # fittedvalues = np.dot(conMat,fit[:,np.newaxis])
-        fittedvalues = regr.predict(conMat)
-        score        = score - np.ravel(fittedvalues)
-        print score.shape
-
-        corrAft = []
-        for i in range(len(confounds)):
-            corrAft.append(stats.pearsonr(conMat[:,i].T,score)[0])
-        print 'maximum corr after decon: ',max(corrAft)
-
-    # REORDER SCORE!
-    if iPerm > 0:
-        # read permutation indices
-        permInds = np.loadtxt(op.join(outDir,'..','..','permInds.txt'),dtype=np.int16)
-        score   = score[permInds[iPerm,:]]
-
-    
-    outFile = op.join(outDir,'{}.mat'.format(
-        '_'.join(['%s' % test_sub for test_sub in df['Subject'][test_index]])))
-    print outFile
-
-    if op.isfile(outFile) and not config.overwrite:
-        return
-
-    # make edge matrix for learning
-    triu_idx    = np.triu_indices(n_nodes,1)
-    n_edges     = len(triu_idx[1]);
-    edges       = np.zeros([n_subs,n_edges])
-    for iSub in range(n_subs):
-        edges[iSub,] = fcMats[:,:,iSub][triu_idx]
- 
-    # compute univariate correlation between each edge and the Subject Measure
-    pears  = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
-    pearsR = [pears[j][0] for j in range(0,n_edges)]
-    # print len(pearsR)
-    # print pearsR[0:10]
-    # return
-    
-    idx_filtered     = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr])
-    idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr and pears[idx][0]>0])
-    idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr and pears[idx][0]<0])
-        
-    if model=='Finn':
-        print model
-        lr  = linear_model.LinearRegression()
-        # select edges (positively and negatively) correlated with score with threshold filterThr
-        filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
-        filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
-        # compute network statistic for each subject in training
-        strength_pos = filtered_pos.sum(axis=1)
-        strength_neg = filtered_neg.sum(axis=1)
-        # compute network statistic for test subjects
-        str_pos_test = edges[np.ix_(test_index,idx_filtered_pos)].sum(axis=1)
-        str_neg_test = edges[np.ix_(test_index,idx_filtered_neg)].sum(axis=1)
-        # regression
-        print strength_pos.reshape(-1,1).shape
-        print strength_neg.reshape(-1,1).shape
-        print np.stack((strength_pos,strength_neg),axis=1).shape
-        print np.stack((str_pos_test,str_neg_test),axis=1).shape
-        lr_posneg           = lr.fit(np.stack((strength_pos,strength_neg),axis=1),score[train_index])
-        predictions_posneg  = lr_posneg.predict(np.stack((str_pos_test,str_neg_test),axis=1))
-        lr_pos              = lr.fit(strength_pos.reshape(-1,1),score[train_index])
-        predictions_pos     = lr_pos.predict(str_pos_test.reshape(-1,1))
-        lr_neg              = lr.fit(strength_neg.reshape(-1,1),score[train_index])
-        predictions_neg     = lr_neg.predict(str_neg_test.reshape(-1,1))
-        errors_posneg       = abs(predictions_posneg-score[test_index])
-        errors_pos          = abs(predictions_pos-score[test_index])
-        errors_neg          = abs(predictions_neg-score[test_index])
-        results = {'pred_posneg':predictions_posneg, 'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_posneg':errors_posneg, 'errors_pos':errors_pos, 'errors_neg':errors_neg, 'idx_filtered_pos':idx_filtered_pos, 'idx_filtered_neg':idx_filtered_neg}
-        print 'saving results'
-        sio.savemat(outFile,results)
-    
-    elif model=='elnet':
-        print model
-        # idx_filtered   = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        rbX            = RobustScaler()
-        X_train        = rbX.fit_transform(X_train)
-        # equalize distribution of score for cv folds
-        n_bins_cv      = 4
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv        = np.digitize(y_train, bin_limits_cv[:-1])
-        # set up nested cross validation 
-        nCV_gridsearch = 3
-        cv             = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch)       
-        elnet          = ElasticNetCV(l1_ratio=[.01],n_alphas=50,cv=cv.split(X_train, bins_cv),max_iter=1500,tol=0.001)
-        # TRAIN
-        start_time     = time()
-        elnet.fit(X_train,y_train)
-        elapsed_time   = time() - start_time
-        print "Trained ELNET in {0:02d}h:{1:02d}min:{2:02d}s".format(int(elapsed_time//3600),int((elapsed_time%3600)//60),int(elapsed_time%60))   
-        # PREDICT
-        X_test         = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test     = X_test.reshape(1, -1)
-        prediction     = elnet.predict(X_test)
-        error          = abs(prediction-y_test)
-        results        = {'pred':prediction, 'error':error, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_, 'idx_filtered':idx_filtered}
-        print 'saving results'
-        sio.savemat(outFile,results)
-    
-    elif model=='ridge':
-        print model
-        # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        rbX = RobustScaler()
-        X_train = rbX.fit_transform(X_train)
-        n_bins_cv = 4
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
-        # set up nested cross validation 
-        nCV_gridsearch = 3
-        cv             = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch)
-        ridge          = RidgeCV(cv=cv.split(X_train, bins_cv),alphas=[.1, 1., 10.])
-        ridge.fit(X_train,np.ravel(y_train))
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = ridge.predict(X_test)
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':ridge.coef_, 'alpha':ridge.alpha_, 'idx_filtered':idx_filtered}
-        print 'saving results'
-        sio.savemat(outFile,results)
-
-    elif model=='lasso':
-        print model
-        # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        k=4
-        n_bins_cv = 4
-        rbX = RobustScaler()
-        X_train = rbX.fit_transform(X_train)
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
-        cv = cross_validation.StratifiedKFold(n_splits=k)
-        lasso = LassoCV(cv=cv.split(X_train, bins_cv),alphas=[.1, .5, .7, .9, .95, .99])
-        lasso.fit(X_train,np.ravel(y_train))
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = lasso.predict(X_test)
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_, 'idx_filtered':idx_filtered}
-        print 'saving results'
-        sio.savemat(outFile,results)
-    
-    elif model=='svm':
-        print model
-        # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        # Epsilon-Support Vector Regression. The free parameters in the model are C and epsilon. The implementation is based on libsvm.
-        svr        = SVR(kernel='linear', epsilon=0.01)
-        # Scale features using statistics that are robust to outliers.
-        # This Scaler removes the median and scales the data according to the quantile range (defaults to IQR: Interquartile Range). 
-        # The IQR is the range between the 1st quartile (25th quantile) and the 3rd quartile (75th quantile).
-        rbX        = RobustScaler()
-        X_train    = rbX.fit_transform(X_train)
-        # bin training data into $n_bins_cv bins -- so as to havce a similar distribution of data in each cv fold 
-        n_bins_cv  = 4
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv    = np.digitize(y_train, bin_limits_cv[:-1])  
-        # Grid search
-        param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
-        # Feature ranking with recursive feature elimination and cross-validated selection of the best number of features
-        # step: corresponds to the (integer) number of features to remove at each iteration
-        # number of cv folds in nested CV using RFE 
-        nCV_gridsearch  = 3
-        nCV_RFEnestedCV = 3
-        selector   = RFECV(svr, step=round(0.10*edges.shape[1]), cv = nCV_RFEnestedCV) 
-        # number of cv folds for GridSearch
-        grids      = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch).split(X_train, bins_cv))
-        # TRAIN!
-        start_time = time()
-        grids.fit(X_train,y_train)
-        elapsed_time = time() - start_time
-        print "Trained SVR in {0:02d}h:{1:02d}min:{2:02d}s".format(int(elapsed_time//3600),int((elapsed_time%3600)//60),int(elapsed_time%60))        
-        # PREDICT!
-        X_test     = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = grids.predict(X_test)
-        error      = abs(prediction-y_test)
-        results    = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_, 'idx_filtered':idx_filtered }
-        print 'saving results'
-        sio.savemat(outFile,results)
-
-    elif model=='mlr':
-        print model
-        # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        rbX       = RobustScaler()
-        X_train   = rbX.fit_transform(X_train)
-        print 'scaled training data'
-        n_bins_cv = 4
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv                = np.digitize(y_train, bin_limits_cv[:-1])
-        
-        nCV_gridsearch  = 3
-        cv      = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch).split(X_train, bins_cv)
-
-        mfilter = feature_selection.SelectPercentile(feature_selection.mutual_info_regression)
-        clf     = Pipeline([('minfo', mfilter), ('lm', linear_model.LinearRegression())])
-        # Select the optimal percentage of features with grid search
-        clf = GridSearchCV(clf, {'minfo__percentile': [0.01, 0.5, 1]}, cv=cv)
-        clf.fit(X_train, y_train)  # set the best parameters
-        print 'learned mlf model'
-        coef_ = clf.best_estimator_.steps[-1][1].coef_
-        coef_ = clf.best_estimator_.steps[0][1].inverse_transform(coef_.reshape(1, -1))
-        X_test = rbX.transform(X_test)
-        print 'scaled testing data'
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = clf.predict(X_test)
-        print 'prediction done!'
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':coef_, 'idx_filtered':idx_filtered }
-        print 'saving results'
-        sio.savemat(outFile,results)
-
-    
-def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=0, confounds=['gender','age','age^2','gender*age','gender*age^2','brainsize','motion','recon'], launchSubproc=False, idcode='',model='Finn', outDir = '', filterThr=0.01):
-    data = sio.loadmat(fcMatFile)
-    df   = pd.read_csv(dataFile)
-    # print "Starting prediction..."
-    # leave one family out
-    iCV = 0
-    config.scriptlist = []
-    for el in np.unique(df['Family_ID']):
-        test_index    = list(df.ix[df['Family_ID']==el].index)
-        test_subjects = list(df.ix[df['Family_ID']==el]['Subject'])
-        outFile = op.join(outDir, '{}.mat'.format(
-            '_'.join(['%s' % test_sub for test_sub in test_subjects])))
-        if op.isfile(outFile) and not config.overwrite:
-            iCV = iCV + 1 
-            continue
-        jobDir = op.join(outDir, 'jobs')
-        if not op.isdir(jobDir): 
-            mkdir(jobDir)
-        jobName = 'f{}_{}_{}_{}_{}_{}_{}'.format(el,config.pipelineName,config.parcellationName,SM, model,config.release,idcode)
-        # make a script
-        thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
-        thispythonfn += 'from helpers import *\n'
-        thispythonfn += 'logFid                  = open("{}","a+")\n'.format(op.join(jobDir,jobName+'.log'))
-        thispythonfn += 'sys.stdout              = logFid\n'
-        thispythonfn += 'sys.stderr              = logFid\n'
-        # print date and time stamp
-        thispythonfn += 'print "========================="\n'
-        thispythonfn += 'print strftime("%Y-%m-%d %H:%M:%S", localtime())\n'
-        thispythonfn += 'print "========================="\n'
-        thispythonfn += 'config.DATADIR          = "{}"\n'.format(config.DATADIR)
-        thispythonfn += 'config.pipelineName     = "{}"\n'.format(config.pipelineName)
-        thispythonfn += 'config.parcellationName = "{}"\n'.format(config.parcellationName)
-        #        thispythonfn += 'config.outScore         = "{}"\n'.format(config.outScore)
-        thispythonfn += 'config.release          = "{}"\n'.format(config.release)
-        thispythonfn += 'config.behavFile        = "{}"\n'.format(config.behavFile)
-        thispythonfn += 'config.overwrite        = {}\n'.format(config.overwrite)
-        thispythonfn += 'print "========================="\n'
-        thispythonfn += 'print "runPredictionJD(\'{}\',\'{}\')"\n'.format(fcMatFile, dataFile)
-        thispythonfn += 'print "========================="\n'
-        thispythonfn += 'runPredictionJD("{}","{}", {}, filterThr={}, SM="{}", idcode="{}", model="{}", outDir="{}", confounds={},iPerm={})\n'.format(
-            fcMatFile, dataFile, '['+','.join(['%s' % test_ind for test_ind in test_index])+']',filterThr, SM, idcode, model, outDir, confounds,iPerm)
-        thispythonfn += 'logFid.close()\n'
-        thispythonfn += 'END'
-        # prepare the script
-        thisScript=op.join(jobDir,jobName+'.sh')
-        while True:
-            if op.isfile(thisScript) and (not config.overwrite):
-                thisScript=thisScript.replace('.sh','+.sh') # use fsl feat convention
-            else:
-                break
-        with open(thisScript,'w') as fidw:
-            fidw.write('#!/bin/bash\n')
-            fidw.write('python {}\n'.format(thispythonfn))
-        cmd='chmod 774 '+thisScript
-        call(cmd,shell=True)
-        #this is a "hack" to make sure the .sh script exists before it is called... 
-        while not op.isfile(thisScript):
-            sleep(.05)
-        if config.queue:
-            # call to fnSubmitToCluster
-            config.scriptlist.append(thisScript)
-            sys.stdout.flush()
-        elif launchSubproc:
-            sys.stdout.flush()
-            process = Popen(thisScript,shell=True)
-            config.joblist.append(process)
-        else:
-            runPredictionJD(fcMatFile,dataFile,test_index,filterThr=filterThr,SM=SM, idcode=idcode, model=model, outDir=outDir, confounds=confounds,iPerm=iPerm)
-        iCV = iCV +1
-    
-    if len(config.scriptlist)>0:
-        # launch array job
-        JobID = fnSubmitJobArrayFromJobList()
-        config.joblist.append(JobID.split('.')[0])
-
-
 #@profile
 def runPipeline():
 
@@ -3380,7 +2678,7 @@ def runPipeline():
         if not op.isfile(config.fmriFile.replace('.dtseries.nii','.tsv')):
             cmd = 'wb_command -cifti-convert -to-text {} {}'.format(config.fmriFile,config.fmriFile.replace('.dtseries.nii','.tsv'))
             call(cmd,shell=True)
-        data = pd.read_csv(config.fmriFile.replace('.dtseries.nii','.tsv'),sep='\t',dtype=np.float32).values
+        data = np.loadtxt(config.fmriFile.replace('.dtseries.nii','.tsv'),dtype=np.float32)
     else:
         volFile = config.fmriFile
         print 'Loading [volume] data in memory... {}'.format(config.fmriFile)
@@ -3420,7 +2718,9 @@ def runPipeline():
                 else:
                     data, volData = Hooks[opr]([data,volData], Flavors[i][j], masks, [nRows, nCols, nSlices, nTRs, affine, TR])
             if r.shape[1] > 0:
-                data = regress(data, nTRs, TR, r, config.preWhitening)    
+                data = regress(data, nTRs, TR, r[:,~np.all(np.isnan(r), axis=0)], config.preWhitening)    
+        # TODO: check if this is the correct way of removing NaNs!
+        # why would there be NaN's here?
         data[np.isnan(data)] = 0
         if config.isCifti:
             volData[np.isnan(volData)] = 0
@@ -3453,7 +2753,7 @@ def runPipeline():
 
     return
 
-def runPipelinePar(launchSubproc=False,overwriteFC=False):
+def runPipelinePar(launchSubproc=False):
     if config.queue: 
         priority=-100
     config.suffix = '_hp2000_clean' if config.useFIX else '' 
@@ -3461,13 +2761,9 @@ def runPipelinePar(launchSubproc=False,overwriteFC=False):
         config.ext = '.dtseries.nii'
     else:
         config.ext = '.nii.gz'
-
-    if config.overwrite:
-        overwriteFC = True
-
     if hasattr(config,'fmriFileTemplate'):
         #e.g. config.fmriFileTemplate =  #fMRIrun#_Atlas_MSMAll.dtseries.nii
-        config.fmriFile = op.join(buildpath(), config.fmriFileTemplate.replace('#fMRIrun#', config.fmriRun).replace('#suffix#',config.suffix))
+        config.fmriFile = op.join(buildpath(), config.fmriFileTemplate.replace('#fMRIrun#', config.fmriRun))
     else:
         if config.isCifti:
             config.fmriFile = op.join(buildpath(), config.fmriRun+'_Atlas'+config.suffix+'.dtseries.nii')
@@ -3547,9 +2843,9 @@ def runPipelinePar(launchSubproc=False,overwriteFC=False):
         return False
 
     config.sortedOperations = sorted(config.Operations, key=operator.itemgetter(1))
-    config.steps            = {}
-    config.Flavors          = {}
-    cstep                   = 0
+    config.steps = {}
+    config.Flavors = {}
+    cstep = 0
 
     # If requested, scrubbing is performed first, before any denoising step
     scrub_idx = -1
@@ -3562,7 +2858,7 @@ def runPipelinePar(launchSubproc=False,overwriteFC=False):
             
     if scrub_idx != -1:        
         for opr in config.sortedOperations:  
-            if opr[1] != 0:# and opr[1] <= scrub_idx:
+            if opr[1] != 0 and opr[1] <= scrub_idx:
                 opr[1] = opr[1]+1
 
         config.sortedOperations[curr_idx][1] = 1
@@ -3580,17 +2876,16 @@ def runPipelinePar(launchSubproc=False,overwriteFC=False):
                 config.steps[cstep].append(opr[0])
                 config.Flavors[cstep].append(opr[2])
                             
-    precomputed = checkXML(config.fmriFile,config.steps,config.Flavors,buildpath()) 
+    precomputed = checkXML(config.fmriFile,config.steps,config.Flavors,buildpath())[0] 
 
-    if precomputed and not config.overwrite:
+
+    if precomputed  and not config.overwrite:
         do_makeGrayPlot    = False
         do_plotFC          = False
         config.fmriFile_dn = precomputed
         if not op.isfile(config.fmriFile_dn.replace(config.ext,'_grayplot.png')):
             do_makeGrayPlot = True
         if not op.isfile(config.fmriFile_dn.replace(config.ext,'_'+config.parcellationName+'_fcMat.png')):
-            do_plotFC = True
-        if overwriteFC:
             do_plotFC = True
         if (not do_plotFC) and (not do_makeGrayPlot):
             return True
@@ -3630,7 +2925,6 @@ def runPipelinePar(launchSubproc=False,overwriteFC=False):
         thispythonfn += 'config.useFIX           = {}\n'.format(config.useFIX)
         thispythonfn += 'config.pipelineName     = "{}"\n'.format(config.pipelineName)
         thispythonfn += 'config.overwrite        = {}\n'.format(config.overwrite)
-        thispythonfn += 'overwriteFC             = {}\n'.format(overwriteFC)
         thispythonfn += 'config.queue            = {}\n'.format(config.queue)
         thispythonfn += 'config.preWhitening     = {}\n'.format(config.preWhitening)
         thispythonfn += 'config.isCifti          = {}\n'.format(config.isCifti)
@@ -3655,7 +2949,7 @@ def runPipelinePar(launchSubproc=False,overwriteFC=False):
         if do_makeGrayPlot:
             thispythonfn += 'makeGrayPlot(overwrite=config.overwrite)\n'
         if do_plotFC:
-            thispythonfn += 'plotFC(overwrite=overwriteFC)\n'
+            thispythonfn += 'plotFC(overwrite=config.overwrite)\n'
         if config.useMemMap:
             thispythonfn += 'try:\n    remove(config.fmriFile.replace(".gz",""))\nexcept OSError:\n    pass\n'
             thispythonfn += 'try:\n    remove(config.fmriFile_dn.replace(".gz",""))\nexcept OSError:\n    pass\n'
@@ -3707,7 +3001,7 @@ def runPipelinePar(launchSubproc=False,overwriteFC=False):
             makeGrayPlot(overwrite=config.overwrite)
 
         if do_plotFC:
-            plotFC(overwrite=overwriteFC)
+            plotFC(overwrite=config.overwrite)
 
         if config.useMemMap:
             try: 
@@ -3734,7 +3028,7 @@ def checkProgress(pause=60,verbose=False):
             nleft = len(config.joblist)
             for i in range(nleft):
                 if config.queue:
-                    myCmd = "ssh csclprd3s1 ""qstat | grep ' {} '""".format(config.joblist[i])
+                    myCmd = "qstat | grep ' {} '".format(config.joblist[i])
                     isEmpty = False
                     try:
                         cmdOut = check_output(myCmd, shell=True)
