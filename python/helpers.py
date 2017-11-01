@@ -3002,7 +3002,7 @@ def runPredictionPar(fcMatFile,thresh=0.01,model='IQ',predict='IQ', motFile='',l
         config.joblist.append(JobID.split('.')[0])
 
 
-def runPredictionJD(fcMatFile, dataFile, test_index, filterThr=0.01, iPerm=0, SM='PMAT24_A_CR', idcode='', model='Finn',outDir='',confounds=['gender','age','age^2','gender*age','gender*age^2','brainsize','motion','recon'],):
+def runPredictionJD(fcMatFile, dataFile, test_index, filterThr=0.01, iPerm=[0], SM='PMAT24_A_CR', idcode='', model='Finn',outDir='',confounds=['gender','age','age^2','gender*age','gender*age^2','brainsize','motion','recon'],):
     data         = sio.loadmat(fcMatFile)
     fcMats       = data['fcMats_'+idcode.split('_')[0]]
     n_subs       = fcMats.shape[-1]
@@ -3068,217 +3068,225 @@ def runPredictionJD(fcMatFile, dataFile, test_index, filterThr=0.01, iPerm=0, SM
             corrAft.append(stats.pearsonr(conMat[:,i].T,score)[0])
         print 'maximum corr after decon: ',max(corrAft)
 
-    # REORDER SCORE!
-    if iPerm > 0:
-        # read permutation indices
-        permInds = np.loadtxt(op.join(outDir,'..','..','permInds.txt'),dtype=np.int16)
-        score   = score[permInds[iPerm,:]]
+    # keep a copy of score
+    score_ = np.copy(score)
 
-    
-    outFile = op.join(outDir,'{}.mat'.format(
-        '_'.join(['%s' % test_sub for test_sub in df['Subject'][test_index]])))
-    print outFile
-
-    if op.isfile(outFile) and not config.overwrite:
-        return
-
-    # make edge matrix for learning
-    triu_idx    = np.triu_indices(n_nodes,1)
-    n_edges     = len(triu_idx[1]);
-    edges       = np.zeros([n_subs,n_edges])
-    for iSub in range(n_subs):
-        edges[iSub,] = fcMats[:,:,iSub][triu_idx]
- 
-    # compute univariate correlation between each edge and the Subject Measure
-    pears  = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
-    pearsR = [pears[j][0] for j in range(0,n_edges)]
-    # print len(pearsR)
-    # print pearsR[0:10]
-    # return
-    
-    idx_filtered     = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr])
-    idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr and pears[idx][0]>0])
-    idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr and pears[idx][0]<0])
+    for thisPerm in iPerm: 
+        print "=  perm{:04d}  ==========".format(thisPerm)
+        print strftime("%Y-%m-%d %H:%M:%S", localtime())
+        print "========================="
         
-    if model=='Finn':
-        print model
-        lr  = linear_model.LinearRegression()
-        # select edges (positively and negatively) correlated with score with threshold filterThr
-        filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
-        filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
-        # compute network statistic for each subject in training
-        strength_pos = filtered_pos.sum(axis=1)
-        strength_neg = filtered_neg.sum(axis=1)
-        # compute network statistic for test subjects
-        str_pos_test = edges[np.ix_(test_index,idx_filtered_pos)].sum(axis=1)
-        str_neg_test = edges[np.ix_(test_index,idx_filtered_neg)].sum(axis=1)
-        # regression
-        print strength_pos.reshape(-1,1).shape
-        print strength_neg.reshape(-1,1).shape
-        print np.stack((strength_pos,strength_neg),axis=1).shape
-        print np.stack((str_pos_test,str_neg_test),axis=1).shape
-        lr_posneg           = lr.fit(np.stack((strength_pos,strength_neg),axis=1),score[train_index])
-        predictions_posneg  = lr_posneg.predict(np.stack((str_pos_test,str_neg_test),axis=1))
-        lr_pos              = lr.fit(strength_pos.reshape(-1,1),score[train_index])
-        predictions_pos     = lr_pos.predict(str_pos_test.reshape(-1,1))
-        lr_neg              = lr.fit(strength_neg.reshape(-1,1),score[train_index])
-        predictions_neg     = lr_neg.predict(str_neg_test.reshape(-1,1))
-        errors_posneg       = abs(predictions_posneg-score[test_index])
-        errors_pos          = abs(predictions_pos-score[test_index])
-        errors_neg          = abs(predictions_neg-score[test_index])
-        results = {'pred_posneg':predictions_posneg, 'pred_pos':predictions_pos, 'pred_neg':predictions_neg, 'errors_posneg':errors_posneg, 'errors_pos':errors_pos, 'errors_neg':errors_neg, 'idx_filtered_pos':idx_filtered_pos, 'idx_filtered_neg':idx_filtered_neg}
-        print 'saving results'
-        sio.savemat(outFile,results)
-    
-    elif model=='elnet':
-        print model
-        # idx_filtered   = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        rbX            = RobustScaler()
-        X_train        = rbX.fit_transform(X_train)
-        # equalize distribution of score for cv folds
-        n_bins_cv      = 4
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv        = np.digitize(y_train, bin_limits_cv[:-1])
-        # set up nested cross validation 
-        nCV_gridsearch = 3
-        cv             = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch)       
-        elnet          = ElasticNetCV(l1_ratio=[.01],n_alphas=50,cv=cv.split(X_train, bins_cv),max_iter=1500,tol=0.001)
-        # TRAIN
-        start_time     = time()
-        elnet.fit(X_train,y_train)
-        elapsed_time   = time() - start_time
-        print "Trained ELNET in {0:02d}h:{1:02d}min:{2:02d}s".format(int(elapsed_time//3600),int((elapsed_time%3600)//60),int(elapsed_time%60))   
-        # PREDICT
-        X_test         = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test     = X_test.reshape(1, -1)
-        prediction     = elnet.predict(X_test)
-        error          = abs(prediction-y_test)
-        results        = {'pred':prediction, 'error':error, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_, 'idx_filtered':idx_filtered}
-        print 'saving results'
-        sio.savemat(outFile,results)
-    
-    elif model=='ridge':
-        print model
-        # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        rbX = RobustScaler()
-        X_train = rbX.fit_transform(X_train)
-        n_bins_cv = 4
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
-        # set up nested cross validation 
-        nCV_gridsearch = 3
-        cv             = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch)
-        ridge          = RidgeCV(cv=cv.split(X_train, bins_cv),alphas=[.1, 1., 10.])
-        ridge.fit(X_train,np.ravel(y_train))
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = ridge.predict(X_test)
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':ridge.coef_, 'alpha':ridge.alpha_, 'idx_filtered':idx_filtered}
-        print 'saving results'
-        sio.savemat(outFile,results)
+        score = np.copy(score_)
+        # REORDER SCORE!
+        if thisPerm > 0:
+            # read permutation indices
+            permInds = np.loadtxt(op.join(outDir,'..','permInds.txt'),dtype=np.int16)
+            score    = score[permInds[thisPerm-1,:]]
 
-    elif model=='lasso':
-        print model
-        # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        k=4
-        n_bins_cv = 4
-        rbX = RobustScaler()
-        X_train = rbX.fit_transform(X_train)
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
-        cv = cross_validation.StratifiedKFold(n_splits=k)
-        lasso = LassoCV(cv=cv.split(X_train, bins_cv),alphas=[.1, .5, .7, .9, .95, .99])
-        lasso.fit(X_train,np.ravel(y_train))
-        X_test = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = lasso.predict(X_test)
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':lasso.coef_, 'alpha':lasso.alpha_, 'idx_filtered':idx_filtered}
-        print 'saving results'
-        sio.savemat(outFile,results)
-    
-    elif model=='svm':
-        print model
-        # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        # Epsilon-Support Vector Regression. The free parameters in the model are C and epsilon. The implementation is based on libsvm.
-        svr        = SVR(kernel='linear', epsilon=0.01)
-        # Scale features using statistics that are robust to outliers.
-        # This Scaler removes the median and scales the data according to the quantile range (defaults to IQR: Interquartile Range). 
-        # The IQR is the range between the 1st quartile (25th quantile) and the 3rd quartile (75th quantile).
-        rbX        = RobustScaler()
-        X_train    = rbX.fit_transform(X_train)
-        # bin training data into $n_bins_cv bins -- so as to havce a similar distribution of data in each cv fold 
-        n_bins_cv  = 4
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv    = np.digitize(y_train, bin_limits_cv[:-1])  
-        # Grid search
-        param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
-        # Feature ranking with recursive feature elimination and cross-validated selection of the best number of features
-        # step: corresponds to the (integer) number of features to remove at each iteration
-        # number of cv folds in nested CV using RFE 
-        nCV_gridsearch  = 3
-        nCV_RFEnestedCV = 3
-        selector   = RFECV(svr, step=round(0.10*edges.shape[1]), cv = nCV_RFEnestedCV) 
-        # number of cv folds for GridSearch
-        grids      = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch).split(X_train, bins_cv))
-        # TRAIN!
-        start_time = time()
-        grids.fit(X_train,y_train)
-        elapsed_time = time() - start_time
-        print "Trained SVR in {0:02d}h:{1:02d}min:{2:02d}s".format(int(elapsed_time//3600),int((elapsed_time%3600)//60),int(elapsed_time%60))        
-        # PREDICT!
-        X_test     = rbX.transform(X_test)
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = grids.predict(X_test)
-        error      = abs(prediction-y_test)
-        results    = {'pred':prediction, 'error':error, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_, 'idx_filtered':idx_filtered }
-        print 'saving results'
-        sio.savemat(outFile,results)
+        outFile = op.join(outDir,'{:04d}'.format(thisPerm),'{}.mat'.format(
+            '_'.join(['%s' % test_sub for test_sub in df['Subject'][test_index]])))
+        print outFile
 
-    elif model=='mlr':
-        print model
-        # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
-        X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
-        rbX       = RobustScaler()
-        X_train   = rbX.fit_transform(X_train)
-        print 'scaled training data'
-        n_bins_cv = 4
-        hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
-        bins_cv                = np.digitize(y_train, bin_limits_cv[:-1])
+        if op.isfile(outFile) and not config.overwrite:
+            continue
+
+        # make edge matrix for learning
+        triu_idx    = np.triu_indices(n_nodes,1)
+        n_edges     = len(triu_idx[1]);
+        edges       = np.zeros([n_subs,n_edges])
+        for iSub in range(n_subs):
+            edges[iSub,] = fcMats[:,:,iSub][triu_idx]
+     
+        # compute univariate correlation between each edge and the Subject Measure
+        pears  = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
+        pearsR = [pears[j][0] for j in range(0,n_edges)]
+        # print len(pearsR)
+        # print pearsR[0:10]
+        # return
         
-        nCV_gridsearch  = 3
-        cv      = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch).split(X_train, bins_cv)
+        idx_filtered     = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr])
+        idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr and pears[idx][0]>0])
+        idx_filtered_neg = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr and pears[idx][0]<0])
+            
+        if model=='Finn':
+            print model
+            lr  = linear_model.LinearRegression()
+            # select edges (positively and negatively) correlated with score with threshold filterThr
+            filtered_pos = edges[np.ix_(train_index,idx_filtered_pos)]
+            filtered_neg = edges[np.ix_(train_index,idx_filtered_neg)]
+            # compute network statistic for each subject in training
+            strength_pos = filtered_pos.sum(axis=1)
+            strength_neg = filtered_neg.sum(axis=1)
+            # compute network statistic for test subjects
+            str_pos_test = edges[np.ix_(test_index,idx_filtered_pos)].sum(axis=1)
+            str_neg_test = edges[np.ix_(test_index,idx_filtered_neg)].sum(axis=1)
+            # regression
+            print strength_pos.reshape(-1,1).shape
+            print strength_neg.reshape(-1,1).shape
+            print np.stack((strength_pos,strength_neg),axis=1).shape
+            print np.stack((str_pos_test,str_neg_test),axis=1).shape
+            lr_posneg           = lr.fit(np.stack((strength_pos,strength_neg),axis=1),score[train_index])
+            predictions_posneg  = lr_posneg.predict(np.stack((str_pos_test,str_neg_test),axis=1))
+            lr_pos              = lr.fit(strength_pos.reshape(-1,1),score[train_index])
+            predictions_pos     = lr_pos.predict(str_pos_test.reshape(-1,1))
+            lr_neg              = lr.fit(strength_neg.reshape(-1,1),score[train_index])
+            predictions_neg     = lr_neg.predict(str_neg_test.reshape(-1,1))
+            # errors_posneg       = abs(predictions_posneg-score[test_index])
+            # errors_pos          = abs(predictions_pos-score[test_index])
+            # errors_neg          = abs(predictions_neg-score[test_index])
+            results = {'score':score[test_index],'pred_posneg':predictions_posneg, 'pred_pos':predictions_pos, 'pred_neg':predictions_neg,'idx_filtered_pos':idx_filtered_pos, 'idx_filtered_neg':idx_filtered_neg}
+            print 'saving results'
+            sio.savemat(outFile,results)
+        
+        elif model=='elnet':
+            print model
+            # idx_filtered   = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
+            X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
+            rbX            = RobustScaler()
+            X_train        = rbX.fit_transform(X_train)
+            # equalize distribution of score for cv folds
+            n_bins_cv      = 4
+            hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+            bins_cv        = np.digitize(y_train, bin_limits_cv[:-1])
+            # set up nested cross validation 
+            nCV_gridsearch = 3
+            cv             = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch)       
+            elnet          = ElasticNetCV(l1_ratio=[.01],n_alphas=50,cv=cv.split(X_train, bins_cv),max_iter=1500,tol=0.001)
+            # TRAIN
+            start_time     = time()
+            elnet.fit(X_train,y_train)
+            elapsed_time   = time() - start_time
+            print "Trained ELNET in {0:02d}h:{1:02d}min:{2:02d}s".format(int(elapsed_time//3600),int((elapsed_time%3600)//60),int(elapsed_time%60))   
+            # PREDICT
+            X_test         = rbX.transform(X_test)
+            if len(X_test.shape) == 1:
+                X_test     = X_test.reshape(1, -1)
+            prediction     = elnet.predict(X_test)
+            # error          = abs(prediction-y_test)
+            results        = {'score':y_test,'pred':prediction, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_, 'idx_filtered':idx_filtered}
+            print 'saving results'
+            sio.savemat(outFile,results)
+        
+        elif model=='ridge':
+            print model
+            # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
+            X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
+            rbX = RobustScaler()
+            X_train = rbX.fit_transform(X_train)
+            n_bins_cv = 4
+            hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+            bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
+            # set up nested cross validation 
+            nCV_gridsearch = 3
+            cv             = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch)
+            ridge          = RidgeCV(cv=cv.split(X_train, bins_cv),alphas=[.1, 1., 10.])
+            ridge.fit(X_train,np.ravel(y_train))
+            X_test = rbX.transform(X_test)
+            if len(X_test.shape) == 1:
+                X_test = X_test.reshape(1, -1)
+            prediction = ridge.predict(X_test)
+            # error = abs(prediction-y_test)
+            results = {'score':y_test,'pred':prediction, 'coef':ridge.coef_, 'alpha':ridge.alpha_, 'idx_filtered':idx_filtered}
+            print 'saving results'
+            sio.savemat(outFile,results)
 
-        mfilter = feature_selection.SelectPercentile(feature_selection.mutual_info_regression)
-        clf     = Pipeline([('minfo', mfilter), ('lm', linear_model.LinearRegression())])
-        # Select the optimal percentage of features with grid search
-        clf = GridSearchCV(clf, {'minfo__percentile': [0.01, 0.5, 1]}, cv=cv)
-        clf.fit(X_train, y_train)  # set the best parameters
-        print 'learned mlf model'
-        coef_ = clf.best_estimator_.steps[-1][1].coef_
-        coef_ = clf.best_estimator_.steps[0][1].inverse_transform(coef_.reshape(1, -1))
-        X_test = rbX.transform(X_test)
-        print 'scaled testing data'
-        if len(X_test.shape) == 1:
-            X_test = X_test.reshape(1, -1)
-        prediction = clf.predict(X_test)
-        print 'prediction done!'
-        error = abs(prediction-y_test)
-        results = {'pred':prediction, 'error':error, 'coef':coef_, 'idx_filtered':idx_filtered }
-        print 'saving results'
-        sio.savemat(outFile,results)
+        elif model=='lasso':
+            print model
+            # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
+            X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
+            k=4
+            n_bins_cv = 4
+            rbX = RobustScaler()
+            X_train = rbX.fit_transform(X_train)
+            hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+            bins_cv = np.digitize(y_train, bin_limits_cv[:-1])
+            cv = cross_validation.StratifiedKFold(n_splits=k)
+            lasso = LassoCV(cv=cv.split(X_train, bins_cv),alphas=[.1, .5, .7, .9, .95, .99])
+            lasso.fit(X_train,np.ravel(y_train))
+            X_test = rbX.transform(X_test)
+            if len(X_test.shape) == 1:
+                X_test = X_test.reshape(1, -1)
+            prediction = lasso.predict(X_test)
+            # error = abs(prediction-y_test)
+            results = {'score':y_test,'pred':prediction, 'coef':lasso.coef_, 'alpha':lasso.alpha_, 'idx_filtered':idx_filtered}
+            print 'saving results'
+            sio.savemat(outFile,results)
+        
+        elif model=='svm':
+            print model
+            # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
+            X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
+            # Epsilon-Support Vector Regression. The free parameters in the model are C and epsilon. The implementation is based on libsvm.
+            svr        = SVR(kernel='linear', epsilon=0.01)
+            # Scale features using statistics that are robust to outliers.
+            # This Scaler removes the median and scales the data according to the quantile range (defaults to IQR: Interquartile Range). 
+            # The IQR is the range between the 1st quartile (25th quantile) and the 3rd quartile (75th quantile).
+            rbX        = RobustScaler()
+            X_train    = rbX.fit_transform(X_train)
+            # bin training data into $n_bins_cv bins -- so as to havce a similar distribution of data in each cv fold 
+            n_bins_cv  = 4
+            hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+            bins_cv    = np.digitize(y_train, bin_limits_cv[:-1])  
+            # Grid search
+            param_grid = [{'estimator__C': [val for val in np.logspace(-6,0,10)]}]
+            # Feature ranking with recursive feature elimination and cross-validated selection of the best number of features
+            # step: corresponds to the (integer) number of features to remove at each iteration
+            # number of cv folds in nested CV using RFE 
+            nCV_gridsearch  = 3
+            nCV_RFEnestedCV = 3
+            selector   = RFECV(svr, step=round(0.10*edges.shape[1]), cv = nCV_RFEnestedCV) 
+            # number of cv folds for GridSearch
+            grids      = GridSearchCV(selector, param_grid, cv = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch).split(X_train, bins_cv))
+            # TRAIN!
+            start_time = time()
+            grids.fit(X_train,y_train)
+            elapsed_time = time() - start_time
+            print "Trained SVR in {0:02d}h:{1:02d}min:{2:02d}s".format(int(elapsed_time//3600),int((elapsed_time%3600)//60),int(elapsed_time%60))        
+            # PREDICT!
+            X_test     = rbX.transform(X_test)
+            if len(X_test.shape) == 1:
+                X_test = X_test.reshape(1, -1)
+            prediction = grids.predict(X_test)
+            # error      = abs(prediction-y_test)
+            results    = {'score':y_test,'pred':prediction, 'support':grids.best_estimator_.support_, 'ranking':grids.best_estimator_.ranking_, 'idx_filtered':idx_filtered }
+            print 'saving results'
+            sio.savemat(outFile,results)
+
+        elif model=='mlr':
+            print model
+            # idx_filtered  = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
+            X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
+            rbX       = RobustScaler()
+            X_train   = rbX.fit_transform(X_train)
+            print 'scaled training data'
+            n_bins_cv = 4
+            hist_cv, bin_limits_cv = np.histogram(y_train, n_bins_cv)
+            bins_cv                = np.digitize(y_train, bin_limits_cv[:-1])
+            
+            nCV_gridsearch  = 3
+            cv      = cross_validation.StratifiedKFold(n_splits=nCV_gridsearch).split(X_train, bins_cv)
+
+            mfilter = feature_selection.SelectPercentile(feature_selection.mutual_info_regression)
+            clf     = Pipeline([('minfo', mfilter), ('lm', linear_model.LinearRegression())])
+            # Select the optimal percentage of features with grid search
+            clf = GridSearchCV(clf, {'minfo__percentile': [0.01, 0.5, 1]}, cv=cv)
+            clf.fit(X_train, y_train)  # set the best parameters
+            print 'learned mlf model'
+            coef_ = clf.best_estimator_.steps[-1][1].coef_
+            coef_ = clf.best_estimator_.steps[0][1].inverse_transform(coef_.reshape(1, -1))
+            X_test = rbX.transform(X_test)
+            print 'scaled testing data'
+            if len(X_test.shape) == 1:
+                X_test = X_test.reshape(1, -1)
+            prediction = clf.predict(X_test)
+            print 'prediction done!'
+            # error = abs(prediction-y_test)
+            results = {'score':y_test,'pred':prediction, 'coef':coef_, 'idx_filtered':idx_filtered }
+            print 'saving results'
+            sio.savemat(outFile,results)
 
     
-def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=0, confounds=['gender','age','age^2','gender*age','gender*age^2','brainsize','motion','recon'], launchSubproc=False, idcode='',model='Finn', outDir = '', filterThr=0.01):
+def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=[0], confounds=['gender','age','age^2','gender*age','gender*age^2','brainsize','motion','recon'], launchSubproc=False, idcode='',model='Finn', outDir = '', filterThr=0.01):
     data = sio.loadmat(fcMatFile)
     df   = pd.read_csv(dataFile)
     # print "Starting prediction..."
@@ -3286,11 +3294,17 @@ def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=0, confounds
     iCV = 0
     config.scriptlist = []
     for el in np.unique(df['Family_ID']):
+        # print el
         test_index    = list(df.ix[df['Family_ID']==el].index)
         test_subjects = list(df.ix[df['Family_ID']==el]['Subject'])
-        outFile = op.join(outDir, '{}.mat'.format(
-            '_'.join(['%s' % test_sub for test_sub in test_subjects])))
-        if op.isfile(outFile) and not config.overwrite:
+        jPerm = list()
+        for thisPerm in iPerm:
+            outFile = op.join(outDir,'{:04d}'.format(thisPerm),'{}.mat'.format(
+                '_'.join(['%s' % test_sub for test_sub in test_subjects])))
+            if not op.isfile(outFile) or config.overwrite:
+                jPerm.append(thisPerm)
+        # print jPerm
+        if len(jPerm)==0:
             iCV = iCV + 1 
             continue
         jobDir = op.join(outDir, 'jobs')
@@ -3318,7 +3332,7 @@ def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=0, confounds
         thispythonfn += 'print "runPredictionJD(\'{}\',\'{}\')"\n'.format(fcMatFile, dataFile)
         thispythonfn += 'print "========================="\n'
         thispythonfn += 'runPredictionJD("{}","{}", {}, filterThr={}, SM="{}", idcode="{}", model="{}", outDir="{}", confounds={},iPerm={})\n'.format(
-            fcMatFile, dataFile, '['+','.join(['%s' % test_ind for test_ind in test_index])+']',filterThr, SM, idcode, model, outDir, confounds,iPerm)
+            fcMatFile, dataFile, '['+','.join(['%s' % test_ind for test_ind in test_index])+']',filterThr, SM, idcode, model, outDir, confounds,jPerm)
         thispythonfn += 'logFid.close()\n'
         thispythonfn += 'END'
         # prepare the script
@@ -3345,7 +3359,7 @@ def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=0, confounds
             process = Popen(thisScript,shell=True)
             config.joblist.append(process)
         else:
-            runPredictionJD(fcMatFile,dataFile,test_index,filterThr=filterThr,SM=SM, idcode=idcode, model=model, outDir=outDir, confounds=confounds,iPerm=iPerm)
+            runPredictionJD(fcMatFile,dataFile,test_index,filterThr=filterThr,SM=SM, idcode=idcode, model=model, outDir=outDir, confounds=confounds,iPerm=jPerm)
         iCV = iCV +1
     
     if len(config.scriptlist)>0:
