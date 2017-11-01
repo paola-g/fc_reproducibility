@@ -3284,7 +3284,7 @@ def runPredictionJD(fcMatFile, dataFile, test_index, filterThr=0.01, iPerm=[0], 
             results = {'score':y_test,'pred':prediction, 'coef':coef_, 'idx_filtered':idx_filtered }
             print 'saving results'
             sio.savemat(outFile,results)
-
+        sys.stdout.flush()
     
 def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=[0], confounds=['gender','age','age^2','gender*age','gender*age^2','brainsize','motion','recon'], launchSubproc=False, idcode='',model='Finn', outDir = '', filterThr=0.01):
     data = sio.loadmat(fcMatFile)
