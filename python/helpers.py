@@ -3582,17 +3582,19 @@ def runPipelinePar(launchSubproc=False,overwriteFC=False):
         config.sortedOperations[curr_idx][1] = 1
         config.sortedOperations = sorted(config.Operations, key=operator.itemgetter(1))
 
+    prev_step = 0
     for opr in config.sortedOperations:
         if opr[1]==0:
             continue
         else:
-            if opr[1]!=cstep:
+            if opr[1]!=prev_step:
                 cstep=cstep+1
                 config.steps[cstep] = [opr[0]]
                 config.Flavors[cstep] = [opr[2]]
             else:
                 config.steps[cstep].append(opr[0])
                 config.Flavors[cstep].append(opr[2])
+            prev_step = opr[1]
                             
     precomputed = checkXML(config.fmriFile,config.steps,config.Flavors,buildpath()) 
 
