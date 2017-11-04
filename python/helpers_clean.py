@@ -374,13 +374,14 @@ def fnSubmitJobArrayFromJobList():
     # write the .qsub file
     with open(op.join('tmp{}'.format(config.tStamp),'qsub'),'w') as f:
         f.write('#!/bin/sh\n')
+        f.write('#$ -S /bin/bash\n')
         f.write('#$ -t 1-{}\n'.format(len(config.scriptlist)))
         f.write('#$ -cwd -V -N tmp{}\n'.format(config.tStamp))
         f.write('#$ -e {}\n'.format(op.join('tmp{}'.format(config.tStamp),'err')))
         f.write('#$ -o {}\n'.format(op.join('tmp{}'.format(config.tStamp),'out')))
         f.write('#$ {}\n'.format(config.sgeopts))
         f.write('SCRIPT=$(awk "NR==$SGE_TASK_ID" {})\n'.format(op.join('tmp{}'.format(config.tStamp),'scriptlist')))
-        f.write('bash $SCRIPT\n')
+        f.write('echo $SCRIPT\n')
     strCommand = 'cd {};qsub {}'.format(getcwd(),op.join('tmp{}'.format(config.tStamp),'qsub'))
     #strCommand = 'ssh csclprd3s1 "cd {};qsub {}"'.format(getcwd(),op.join('tmp{}'.format(config.tStamp),'qsub'))
     # write down the command to a file in the job folder
@@ -1186,9 +1187,6 @@ def runPredictionJD(fcMatFile, dataFile, test_index, filterThr=0.01, iPerm=[0], 
         # compute univariate correlation between each edge and the Subject Measure
         pears  = [stats.pearsonr(np.squeeze(edges[train_index,j]),score[train_index]) for j in range(0,n_edges)]
         pearsR = [pears[j][0] for j in range(0,n_edges)]
-        # print len(pearsR)
-        # print pearsR[0:10]
-        # return
         
         idx_filtered     = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr])
         idx_filtered_pos = np.array([idx for idx in range(1,n_edges) if pears[idx][1]<filterThr and pears[idx][0]>0])
@@ -1217,16 +1215,12 @@ def runPredictionJD(fcMatFile, dataFile, test_index, filterThr=0.01, iPerm=[0], 
             predictions_pos     = lr_pos.predict(str_pos_test.reshape(-1,1))
             lr_neg              = lr.fit(strength_neg.reshape(-1,1),score[train_index])
             predictions_neg     = lr_neg.predict(str_neg_test.reshape(-1,1))
-            # errors_posneg       = abs(predictions_posneg-score[test_index])
-            # errors_pos          = abs(predictions_pos-score[test_index])
-            # errors_neg          = abs(predictions_neg-score[test_index])
             results = {'score':score[test_index],'pred_posneg':predictions_posneg, 'pred_pos':predictions_pos, 'pred_neg':predictions_neg,'idx_filtered_pos':idx_filtered_pos, 'idx_filtered_neg':idx_filtered_neg}
             print 'saving results'
             sio.savemat(outFile,results)
         
         elif model=='elnet':
             print model
-            # idx_filtered   = np.argsort(np.abs(pearsR))[np.int(np.ceil(np.float(n_edges)/2)):]
             X_train, X_test, y_train, y_test = edges[np.ix_(train_index,idx_filtered)], edges[np.ix_(test_index,idx_filtered)], score[train_index], score[test_index]
             rbX            = RobustScaler()
             X_train        = rbX.fit_transform(X_train)
@@ -1248,7 +1242,6 @@ def runPredictionJD(fcMatFile, dataFile, test_index, filterThr=0.01, iPerm=[0], 
             if len(X_test.shape) == 1:
                 X_test     = X_test.reshape(1, -1)
             prediction     = elnet.predict(X_test)
-            # error          = abs(prediction-y_test)
             results        = {'score':y_test,'pred':prediction, 'coef':elnet.coef_, 'alpha':elnet.alpha_, 'l1_ratio':elnet.l1_ratio_, 'idx_filtered':idx_filtered}
             print 'saving results'
             sio.savemat(outFile,results)        
@@ -1278,7 +1271,7 @@ def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=[0], confoun
         jobName = 'f{}_{}_{}_{}_{}_{}_{}'.format(el,config.pipelineName,config.parcellationName,SM, model,config.release,idcode)
         # make a script
         thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
-        thispythonfn += 'from helpers import *\n'
+        thispythonfn += 'from helpers_clean import *\n'
         thispythonfn += 'logFid                  = open("{}","a+")\n'.format(op.join(jobDir,jobName+'.log'))
         thispythonfn += 'sys.stdout              = logFid\n'
         thispythonfn += 'sys.stderr              = logFid\n'
@@ -1296,11 +1289,15 @@ def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=[0], confoun
         thispythonfn += 'print "========================="\n'
         thispythonfn += 'print "runPredictionJD(\'{}\',\'{}\')"\n'.format(fcMatFile, dataFile)
         thispythonfn += 'print "========================="\n'
-        thispythonfn += 'runPredictionJD("{}","{}", {}, filterThr={}, SM="{}", idcode="{}", model="{}", outDir="{}", confounds={},iPerm={})\n'.format(
-            fcMatFile, dataFile, '['+','.join(['%s' % test_ind for test_ind in test_index])+']',filterThr, SM, idcode, model, outDir, confounds,jPerm)
+        thispythonfn += 'print "========================="\n'
+        str1 =  '['+','.join(['%s' % test_ind for test_ind in test_index])+']'
+        str2 =  '['+','.join(['"%s"' % el for el in confounds])+']'
+        str3 =  '['+','.join(['%s' % el for el in jPerm])+']'
+        thispythonfn += 'runPredictionJD("{}","{}",'.format(fcMatFile, dataFile)
+        thispythonfn += ' {}, filterThr={}, SM="{}"'.format(str1,filterThr, SM)
+        thispythonfn += ', idcode="{}", model="{}", outDir="{}", confounds={},iPerm={})\n'.format(idcode, model, outDir, str2,str3)
         thispythonfn += 'logFid.close()\n'
         thispythonfn += 'END'
-        # prepare the script
         thisScript=op.join(jobDir,jobName+'.sh')
         while True:
             if op.isfile(thisScript) and (not config.overwrite):
@@ -1336,11 +1333,8 @@ def runPredictionParJD(fcMatFile, dataFile, SM='PMAT24_A_CR', iPerm=[0], confoun
 def runPipeline():
 
     Flavors = config.Flavors
-    # print Flavors
     steps   = config.steps
-    # print steps
     sortedOperations = config.sortedOperations
-    # print sortedOperations
     
     timeStart = localtime()
     print 'Step 0 : Building WM, CSF and GM masks...'
@@ -1350,7 +1344,6 @@ def runPipeline():
     if config.isCifti:
         # volume
         volFile = op.join(buildpath(), config.fmriRun+'.nii.gz')
-        # volFile = config.fmriFile.replace('_MSMAll','').replace('_Atlas','').replace('.dtseries.nii','.nii.gz')
         print 'Loading [volume] data in memory... {}'.format(volFile)
         volData, nRows, nCols, nSlices, nTRs, affine, TR = load_img(volFile, maskAll) 
         # cifti
@@ -1526,7 +1519,7 @@ def runPipelinePar(launchSubproc=False,overwriteFC=False):
 
         # make a script
         thispythonfn  = '<< END\nimport sys\nsys.path.insert(0,"{}")\n'.format(getcwd())
-        thispythonfn += 'from helpers import *\n'
+        thispythonfn += 'from helpers_clean import *\n'
         thispythonfn += 'logFid                  = open("{}","a+",1)\n'.format(op.join(jobDir,jobName+'.log'))
         thispythonfn += 'sys.stdout              = logFid\n'
         thispythonfn += 'sys.stderr              = logFid\n'
