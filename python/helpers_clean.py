@@ -381,7 +381,7 @@ def fnSubmitJobArrayFromJobList():
         f.write('#$ -o {}\n'.format(op.join('tmp{}'.format(config.tStamp),'out')))
         f.write('#$ {}\n'.format(config.sgeopts))
         f.write('SCRIPT=$(awk "NR==$SGE_TASK_ID" {})\n'.format(op.join('tmp{}'.format(config.tStamp),'scriptlist')))
-        f.write('echo $SCRIPT\n')
+        f.write('bash $SCRIPT\n')
     strCommand = 'cd {};qsub {}'.format(getcwd(),op.join('tmp{}'.format(config.tStamp),'qsub'))
     #strCommand = 'ssh csclprd3s1 "cd {};qsub {}"'.format(getcwd(),op.join('tmp{}'.format(config.tStamp),'qsub'))
     # write down the command to a file in the job folder
